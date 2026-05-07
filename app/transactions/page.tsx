@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {  Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import BottomNav from "@/components/navigation/BottomNav";
 import { theme } from "@/components/lib/theme";
@@ -153,7 +153,7 @@ const getEditCategories = (type: TransactionType) => {
   return [...base, ...custom];
 };
 
-export default function TransactionsPage() {
+function TransactionsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [showFilterModal, setShowFilterModal] = useState(false);
@@ -1298,3 +1298,11 @@ const accountTextStyle = {
   overflow: "hidden",
   textOverflow: "ellipsis",
 } as const;
+
+export default function TransactionsPage() {
+  return (
+    <Suspense fallback={null}>
+      <TransactionsContent />
+    </Suspense>
+  );
+}
