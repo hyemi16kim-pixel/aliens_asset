@@ -47,13 +47,13 @@ export async function GET() {
     const transactions = fullFamily?.transactions || [];
     const goals = fullFamily?.goals || [];
 
-    const totalIncome = transactions
-      .filter((tx) => tx.type === "INCOME")
-      .reduce((sum, tx) => sum + tx.amount, 0);
+      const totalIncome = transactions
+        .filter((tx: any) => tx.type === "INCOME")
+        .reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
 
-    const totalExpense = transactions
-      .filter((tx) => tx.type === "EXPENSE")
-      .reduce((sum, tx) => sum + tx.amount, 0);
+      const totalExpense = transactions
+        .filter((tx: any) => tx.type === "EXPENSE")
+        .reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
 
     const totalTarget = goals.reduce((sum, goal) => sum + goal.targetAmount, 0);
     const totalCurrent = goals.reduce((sum, goal) => sum + goal.currentAmount, 0);
