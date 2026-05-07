@@ -28,6 +28,7 @@ import {
   Shirt,
   Smartphone,
   PawPrint,
+  ChevronRight,
   Baby,
   Music,
   Briefcase,
