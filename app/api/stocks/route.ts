@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
     });
 
     const result = await Promise.all(
-      holdings.map(async (item) => {
+      holdings.map(async (item: any) => {
         const currentPrice = (await getNaverStockPrice(item.code)) || item.avgPrice;
         const marketValue = currentPrice * item.quantity;
         const purchaseAmount = item.avgPrice * item.quantity;
