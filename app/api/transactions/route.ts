@@ -166,7 +166,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "거래 ID 필요" }, { status: 400 });
     }
 
-    const result = await prisma.$transaction(async (db) => {
+    const result = await prisma.$transaction(async (db: any) => {
       const oldTx = await db.transaction.findUnique({
         where: { id: body.id },
       });
