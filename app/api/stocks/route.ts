@@ -62,8 +62,8 @@ export async function GET(req: NextRequest) {
       })
     );
         const totalMarketValue = result.reduce(
-        (sum, item) => sum + item.marketValue,
-        0
+          (sum: number, item: any) => sum + item.marketValue,
+          0
         );
 
         const account = await prisma.account.findUnique({
