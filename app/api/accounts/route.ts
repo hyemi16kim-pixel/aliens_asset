@@ -90,22 +90,22 @@ const [thisPaidTxs, nextPaidTxs] = await Promise.all([
 ]);
 
 const thisExpense = thisTxs.reduce(
-  (sum, tx) => sum + Number(tx.amount || 0),
+  (sum: number, tx: any) => sum + Number(tx.amount || 0),
   0
 );
 
 const nextExpense = nextTxs.reduce(
-  (sum, tx) => sum + Number(tx.amount || 0),
+  (sum: number, tx: any) => sum + Number(tx.amount || 0),
   0
 );
 
 const thisPaid = thisPaidTxs.reduce(
-  (sum, tx) => sum + Number(tx.amount || 0),
+  (sum: number, tx: any) => sum + Number(tx.amount || 0),
   0
 );
 
 const nextPaid = nextPaidTxs.reduce(
-  (sum, tx) => sum + Number(tx.amount || 0),
+  (sum: number, tx: any) => sum + Number(tx.amount || 0),
   0
 );
 
