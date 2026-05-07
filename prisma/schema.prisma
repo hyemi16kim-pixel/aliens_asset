@@ -1,0 +1,152 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  OWNER
+  MEMBER
+}
+
+enum AccountType {
+  CASH
+  BANK
+  CARD
+  STOCK
+  SAVING
+  LOAN
+  ETC
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum GoalStatus {
+  ACTIVE
+  DONE
+  PAUSED
+}
+
+model Family {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users        User[]
+  accounts     Account[]
+  transactions Transaction[]
+  goals        Goal[]
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  familyId  Int
+  name      String
+  role      UserRole @default(MEMBER)
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  family       Family        @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  accounts     Account[]
+  transactions Transaction[]
+  goals        Goal[]
+}
+
+model Account {
+  id        Int         @id @default(autoincrement())
+  familyId  Int
+  ownerId   Int?
+  name      String
+  type      AccountType @default(BANK)
+  balance   Int         @default(0)
+  memo      String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  cardPaymentDay    Int?
+  cardCycleStartDay Int?
+  cardCycleEndDay   Int?
+  
+  stockCash Int @default(0)
+
+  stockHoldings StockHolding[]
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  owner  User?  @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  
+  displayOrder       Int       @default(0)
+  color              String?   @default("#A78BFA")
+  nextPaymentDate    DateTime?
+  nextPaymentAmount  Float?
+  nextMonthAmount    Float?
+  maturityDate       DateTime?
+  monthlyPayment     Float?
+
+  fromTransactions Transaction[] @relation("FromAccount")
+  toTransactions   Transaction[] @relation("ToAccount")
+}
+
+model Transaction {
+  id            Int             @id @default(autoincrement())
+  familyId      Int
+  userId        Int?
+  fromAccountId Int?
+  toAccountId   Int?
+  type          TransactionType
+  amount        Int
+  category      String
+  memo          String?
+  owner         String?
+  transactionAt DateTime        @default(now())
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  family      Family   @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  fromAccount Account? @relation("FromAccount", fields: [fromAccountId], references: [id], onDelete: SetNull)
+  toAccount   Account? @relation("ToAccount", fields: [toAccountId], references: [id], onDelete: SetNull)
+}
+
+model Goal {
+  id            Int        @id @default(autoincrement())
+  familyId      Int
+  userId        Int?
+  title         String
+  
+  targetAmount  Int
+  currentAmount Int        @default(0)
+  status        GoalStatus @default(ACTIVE)
+  icon String? @default("🛸")
+  dueDate       DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  periodType String   @default("ALWAYS")
+
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model StockHolding {
+  id        Int      @id @default(autoincrement())
+  accountId Int
+  name      String
+  code      String
+  quantity  Int
+  avgPrice  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@unique([accountId, code])
+}
