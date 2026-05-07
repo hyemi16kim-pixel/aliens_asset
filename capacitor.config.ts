@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: "Alien Bank",
   webDir: "out",
   server: {
-    url: "http://192.168.219.101:3000",
+    url: "https://aliens-asset.vercel.app",
     cleartext: true,
   },
 };

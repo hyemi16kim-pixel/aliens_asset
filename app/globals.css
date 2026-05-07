@@ -27,3 +27,9 @@ body {
 *::-webkit-scrollbar {
   display: none;
 }
+
+html,
+body {
+  background: #f7f4f8 !important;
+  color: #18111b !important;
+}
