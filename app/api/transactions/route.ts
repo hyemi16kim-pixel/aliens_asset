@@ -128,7 +128,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    const result = await prisma.$transaction(async (db) => {
+const result = await prisma.$transaction(async (db: any) => {
       const transaction = await db.transaction.create({
         data: {
           familyId: body.familyId,
