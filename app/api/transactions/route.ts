@@ -212,7 +212,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "거래 ID 필요" }, { status: 400 });
     }
 
-    await prisma.$transaction(async (db) => {
+    await prisma.$transaction(async (db: any) => {
       const oldTx = await db.transaction.findUnique({
         where: { id },
       });
