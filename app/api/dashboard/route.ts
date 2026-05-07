@@ -131,9 +131,13 @@ export async function GET(req: NextRequest) {
       0
     );
 
-    const debtAmount = accounts
-      .filter((account) => account.type === "LOAN" || account.type === "CARD")
-      .reduce((sum, account) => sum + Math.abs(Number(account.balance || 0)), 0);
+   const debtAmount = accounts
+  .filter((account: any) => account.type === "LOAN" || account.type === "CARD")
+  .reduce(
+    (sum: number, account: any) =>
+      sum + Math.abs(Number(account.balance || 0)),
+    0
+  );
 
     let totalIncome = 0;
     let totalExpense = 0;
