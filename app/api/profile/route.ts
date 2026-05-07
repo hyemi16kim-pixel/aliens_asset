@@ -55,8 +55,15 @@ export async function GET() {
         .filter((tx: any) => tx.type === "EXPENSE")
         .reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
 
-    const totalTarget = goals.reduce((sum, goal) => sum + goal.targetAmount, 0);
-    const totalCurrent = goals.reduce((sum, goal) => sum + goal.currentAmount, 0);
+const totalTarget = goals.reduce(
+  (sum: number, goal: any) => sum + goal.targetAmount,
+  0
+);
+
+const totalCurrent = goals.reduce(
+  (sum: number, goal: any) => sum + goal.currentAmount,
+  0
+);
 
     return NextResponse.json({
       familyCode: family.code,
