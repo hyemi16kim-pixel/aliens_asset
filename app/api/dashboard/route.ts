@@ -146,7 +146,7 @@ export async function GET(req: NextRequest) {
 
     const categoryMap: Record<string, number> = {};
 
-    summaryTransactions.forEach((tx) => {
+    summaryTransactions.forEach((tx: any) => {
       const amount = Number(tx.amount || 0);
 
       if (tx.type === "INCOME") {
