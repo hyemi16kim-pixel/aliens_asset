@@ -15,7 +15,7 @@ export async function GET() {
     });
 
     await Promise.all(
-      txs.map((tx) => {
+      txs.map((tx: any) => {
         const ownerName =
           tx.toAccount?.owner?.name ||
           tx.fromAccount?.owner?.name ||
