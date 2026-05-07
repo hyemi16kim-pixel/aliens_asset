@@ -15,7 +15,7 @@ export async function POST() {
     }
 
     const tableNames = tables
-      .map((t) => `"${t.tablename}"`)
+      .map((t: any) => `"${t.tablename}"`)
       .join(", ");
 
     await prisma.$executeRawUnsafe(`
