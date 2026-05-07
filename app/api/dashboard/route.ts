@@ -126,7 +126,8 @@ export async function GET(req: NextRequest) {
       ]);
 
     const totalAsset = accounts.reduce(
-      (sum, account) => sum + Number(account.balance || 0),
+      (sum: number, account: any) =>
+      sum + Number(account.balance || 0),
       0
     );
 
