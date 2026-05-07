@@ -26,7 +26,7 @@ export async function GET() {
     const month = now.getMonth();
 
     const withCardAmounts = await Promise.all(
-      accounts.map(async (account) => {
+      accounts.map(async (account: any) => {
         if (account.type !== "CARD" || !account.cardCycleEndDay) {
           return account;
         }
