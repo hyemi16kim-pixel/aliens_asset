@@ -160,7 +160,7 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    previousTransactions.forEach((tx) => {
+    previousTransactions.forEach((tx: any) => {
       const amount = Number(tx.amount || 0);
 
       if (tx.type === "INCOME") previousIncome += amount;
