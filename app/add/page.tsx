@@ -196,18 +196,36 @@ const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 const parseImportedMessage = (item: ImportedMessage) => {
   const text = item.rawText || "";
 
-  const cleanText = text.replace(/누적\s*\d{1,3}(?:,\d{3})*\s*원/g, "");
+  const cleanText = text.replace(
+    /누적\s*\d{1,3}(?:,\d{3})*\s*원/g,
+    ""
+  );
 
-  const amountMatch =
-    cleanText.match(/(?:입금|출금|승인|결제|사용|자동결제)\s*(\d{1,3}(?:,\d{3})+|\d+)\s*원?/) ||
-    cleanText.match(/(\d{1,3}(?:,\d{3})+|\d+)\s*원/);
-    
-  const amount = amountMatch
-    ? Number(amountMatch[1].replace(/,/g, ""))
+  const contextualMatch = cleanText.match(
+    /(?:입금|출금|승인|결제|사용|자동결제)[\s\S]{0,30}?(\d{1,3}(?:,\d{3})+|\d+)/
+  );
+
+  const wonMatch = cleanText.match(
+    /(\d{1,3}(?:,\d{3})+|\d+)\s*원/
+  );
+
+  const numberCandidates = Array.from(
+    cleanText.matchAll(/\d{1,3}(?:,\d{3})+|\d+/g)
+  )
+    .map((v) => Number(v[0].replace(/,/g, "")))
+    .filter((v) => v >= 1000);
+
+  const amount = contextualMatch
+    ? Number(contextualMatch[1].replace(/,/g, ""))
+    : wonMatch
+    ? Number(wonMatch[1].replace(/,/g, ""))
+    : numberCandidates.length > 0
+    ? Math.max(...numberCandidates)
     : 0;
 
-  const type: TransactionType =
-    /입금/.test(text) ? "INCOME" : "EXPENSE";
+  const type: TransactionType = /입금/.test(text)
+    ? "INCOME"
+    : "EXPENSE";
 
   return {
     type,
