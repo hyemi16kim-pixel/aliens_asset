@@ -16,19 +16,19 @@ async function applyBalance(tx: {
     });
   }
 
-  if (tx.type === "INCOME" && tx.toAccountId) {
+  const incomeAccountId = tx.toAccountId || tx.fromAccountId;
+
+  if (tx.type === "INCOME" && incomeAccountId) {
     const toAccount = await prisma.account.findUnique({
-      where: { id: tx.toAccountId },
+      where: { id: incomeAccountId },
     });
 
     await prisma.account.update({
-      where: { id: tx.toAccountId },
+      where: { id: incomeAccountId },
       data: {
         balance: { increment: tx.amount },
         stockCash:
-          toAccount?.type === "STOCK"
-            ? { increment: tx.amount }
-            : undefined,
+          toAccount?.type === "STOCK" ? { increment: tx.amount } : undefined,
       },
     });
   }
@@ -44,9 +44,7 @@ async function applyBalance(tx: {
         data: {
           balance: { decrement: tx.amount },
           stockCash:
-            fromAccount?.type === "STOCK"
-              ? { decrement: tx.amount }
-              : undefined,
+            fromAccount?.type === "STOCK" ? { decrement: tx.amount } : undefined,
         },
       });
     }
@@ -61,9 +59,7 @@ async function applyBalance(tx: {
         data: {
           balance: { increment: tx.amount },
           stockCash:
-            toAccount?.type === "STOCK"
-              ? { increment: tx.amount }
-              : undefined,
+            toAccount?.type === "STOCK" ? { increment: tx.amount } : undefined,
         },
       });
     }
@@ -83,25 +79,51 @@ async function rollbackBalance(tx: {
     });
   }
 
-  if (tx.type === "INCOME" && tx.toAccountId) {
+  const incomeAccountId = tx.toAccountId || tx.fromAccountId;
+
+  if (tx.type === "INCOME" && incomeAccountId) {
+    const toAccount = await prisma.account.findUnique({
+      where: { id: incomeAccountId },
+    });
+
     await prisma.account.update({
-      where: { id: tx.toAccountId },
-      data: { balance: { decrement: tx.amount } },
+      where: { id: incomeAccountId },
+      data: {
+        balance: { decrement: tx.amount },
+        stockCash:
+          toAccount?.type === "STOCK" ? { decrement: tx.amount } : undefined,
+      },
     });
   }
 
   if (tx.type === "TRANSFER") {
     if (tx.fromAccountId) {
+      const fromAccount = await prisma.account.findUnique({
+        where: { id: tx.fromAccountId },
+      });
+
       await prisma.account.update({
         where: { id: tx.fromAccountId },
-        data: { balance: { increment: tx.amount } },
+        data: {
+          balance: { increment: tx.amount },
+          stockCash:
+            fromAccount?.type === "STOCK" ? { increment: tx.amount } : undefined,
+        },
       });
     }
 
     if (tx.toAccountId) {
+      const toAccount = await prisma.account.findUnique({
+        where: { id: tx.toAccountId },
+      });
+
       await prisma.account.update({
         where: { id: tx.toAccountId },
-        data: { balance: { decrement: tx.amount } },
+        data: {
+          balance: { decrement: tx.amount },
+          stockCash:
+            toAccount?.type === "STOCK" ? { decrement: tx.amount } : undefined,
+        },
       });
     }
   }
@@ -128,28 +150,22 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-const result = await prisma.$transaction(async (db: any) => {
-      const transaction = await db.transaction.create({
-        data: {
-          familyId: body.familyId,
-          userId: body.userId || null,
-          fromAccountId: body.fromAccountId || null,
-          toAccountId: body.toAccountId || null,
-          type: body.type,
-          amount: Number(body.amount),
-          category: body.category,
-          owner: body.owner || null,
-          memo: body.memo || null,
-          transactionAt: body.transactionAt
-            ? new Date(body.transactionAt)
-            : new Date(),
-        },
-      });
-
-      await applyBalance(transaction as any);
-
-      return transaction;
+    const result = await prisma.transaction.create({
+      data: {
+        familyId: body.familyId,
+        userId: body.userId || null,
+        fromAccountId: body.fromAccountId || null,
+        toAccountId: body.toAccountId || null,
+        type: body.type,
+        amount: Number(body.amount),
+        category: body.category,
+        owner: body.owner || null,
+        memo: body.memo || null,
+        transactionAt: body.transactionAt ? new Date(body.transactionAt) : new Date(),
+      },
     });
+
+    await applyBalance(result as any);
 
     return NextResponse.json(result);
   } catch (error) {
@@ -166,35 +182,29 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "거래 ID 필요" }, { status: 400 });
     }
 
-    const result = await prisma.$transaction(async (db: any) => {
-      const oldTx = await db.transaction.findUnique({
-        where: { id: body.id },
-      });
-
-      if (!oldTx) throw new Error("기존 거래 없음");
-
-      await rollbackBalance(oldTx as any);
-
-      const updated = await db.transaction.update({
-        where: { id: body.id },
-        data: {
-          type: body.type,
-          amount: Number(body.amount),
-          fromAccountId: body.fromAccountId || null,
-          toAccountId: body.toAccountId || null,
-          category: body.category,
-          owner: body.owner || null,
-          memo: body.memo || null,
-          transactionAt: body.transactionAt
-            ? new Date(body.transactionAt)
-            : undefined,
-        },
-      });
-
-      await applyBalance(updated as any);
-
-      return updated;
+    const oldTx = await prisma.transaction.findUnique({
+      where: { id: body.id },
     });
+
+    if (!oldTx) throw new Error("기존 거래 없음");
+
+    await rollbackBalance(oldTx as any);
+
+    const result = await prisma.transaction.update({
+      where: { id: body.id },
+      data: {
+        type: body.type,
+        amount: Number(body.amount),
+        fromAccountId: body.fromAccountId || null,
+        toAccountId: body.toAccountId || null,
+        category: body.category,
+        owner: body.owner || null,
+        memo: body.memo || null,
+        transactionAt: body.transactionAt ? new Date(body.transactionAt) : undefined,
+      },
+    });
+
+    await applyBalance(result as any);
 
     return NextResponse.json(result);
   } catch (error) {
@@ -212,18 +222,16 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "거래 ID 필요" }, { status: 400 });
     }
 
-    await prisma.$transaction(async (db: any) => {
-      const oldTx = await db.transaction.findUnique({
-        where: { id },
-      });
+    const oldTx = await prisma.transaction.findUnique({
+      where: { id },
+    });
 
-      if (!oldTx) throw new Error("기존 거래 없음");
+    if (!oldTx) throw new Error("기존 거래 없음");
 
-      await rollbackBalance(oldTx as any);
+    await rollbackBalance(oldTx as any);
 
-      await db.transaction.delete({
-        where: { id },
-      });
+    await prisma.transaction.delete({
+      where: { id },
     });
 
     return NextResponse.json({ success: true });

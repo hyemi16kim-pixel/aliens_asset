@@ -25,6 +25,8 @@ export async function PATCH(
       where: { id },
       data: {
         name: body.name ?? before.name,
+        sourceKey:
+        body.sourceKey !== undefined ? body.sourceKey : before.sourceKey,
         cardPaymentDay:
         body.cardPaymentDay !== undefined ? body.cardPaymentDay : before.cardPaymentDay,
         cardCycleStartDay:

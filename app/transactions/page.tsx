@@ -61,9 +61,11 @@ import {
 } from "@/components/lib/monthRange";
 
 type TransactionType = "INCOME" | "EXPENSE" | "TRANSFER";
-type FilterType = "ALL" | TransactionType;
-type ViewMode = "LIST" | "CALENDAR";
 
+const FILTER_ORDER = ["CALENDAR", "ALL", "INCOME", "EXPENSE", "TRANSFER"] as const;
+
+type FilterType = (typeof FILTER_ORDER)[number];
+type ViewMode = "LIST" | "CALENDAR";
 
 type Transaction = {
   id: number;
@@ -117,40 +119,21 @@ const iconKeyMap: Record<string, any> = {
   "주식 매도": { icon: TrendingDown, bg: "#FFF3F6" },
 };
 
-const getIconData = (category: string) => {
+const getIconData = (category: string, serverCategories: any[] = []) => {
   if (category.includes("주식 매수")) return iconKeyMap["주식 매수"];
   if (category.includes("주식 매도")) return iconKeyMap["주식 매도"];
-  if (category.includes("자산 수정")) {
-    return iconKeyMap["자산 수정"];
-  }
+  if (category.includes("자산 수정")) return iconKeyMap["자산 수정"];
 
-  const keys = ["EXPENSE", "INCOME", "TRANSFER"];
+  const found = serverCategories.find((item) => item.name === category);
+  const iconKey = found?.iconKey || found?.name || category;
 
-  for (const key of keys) {
-    const saved = localStorage.getItem(`alien_custom_categories_${key}`);
-    const list = saved ? JSON.parse(saved) : [];
-    const found = list.find((item: any) => item.name === category);
-
-    if (found && iconKeyMap[found.iconKey]) {
-      return iconKeyMap[found.iconKey];
-    }
-  }
-
-  return iconKeyMap[category] || iconKeyMap["식비"];
+  return iconKeyMap[iconKey] || iconKeyMap[category] || iconKeyMap["식비"];
 };
 
-const getEditCategories = (type: TransactionType) => {
-  const savedCustom = localStorage.getItem(`alien_custom_categories_${type}`);
-  const custom = savedCustom ? JSON.parse(savedCustom).map((item: any) => item.name) : [];
-
-  const base =
-    type === "EXPENSE"
-      ? ["식비"]
-      : type === "INCOME"
-      ? ["수입"]
-      : ["이체"];
-
-  return [...base, ...custom];
+const getBaseCategories = (type: TransactionType) => {
+  if (type === "EXPENSE") return ["식비"];
+  if (type === "INCOME") return ["수입", "배당금"];
+  return ["이체"];
 };
 
 function TransactionsContent() {
@@ -161,8 +144,11 @@ function TransactionsContent() {
   const [selectedType, setSelectedType] = useState("");
   const [accounts, setAccounts] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [filter, setFilter] = useState<FilterType>("ALL");
-  const [viewMode, setViewMode] = useState<ViewMode>("LIST");
+  const [serverCategories, setServerCategories] = useState<any[]>([]);
+  const [filterType, setFilterType] = useState<FilterType>("CALENDAR");
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+
+  const [viewMode, setViewMode] = useState<"LIST" | "CALENDAR">("CALENDAR");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [monthStartDay, setMonthStartDay] = useState(1);
   const [month, setMonth] = useState(() => {
@@ -189,10 +175,15 @@ function TransactionsContent() {
     setTransactions(data);
   };
 
+  const loadCategories = async () => {
+  const res = await fetch("/api/categories?familyId=1");
+  const data = await res.json();
+  setServerCategories(Array.isArray(data) ? data : []);
+};
 useEffect(() => {
   loadTransactions();
-
-  fetch("/api/accounts")
+  loadCategories();
+  fetch("/api/accounts/simple")
     .then((res) => res.json())
     .then((data) => {
       const accountList = Array.isArray(data) ? data : data.accounts || [];
@@ -234,7 +225,10 @@ useEffect(() => {
 
      const sameMonth = isDateInRange(txDate, monthRange.start, monthRange.end);
 
-      const topTypeMatch = filter === "ALL" ? true : tx.type === filter;
+      const topTypeMatch =
+      filterType === "CALENDAR" || filterType === "ALL"
+        ? true
+        : tx.type === filterType;
 
       const modalTypeMatch = selectedType ? tx.type === selectedType : true;
 
@@ -245,7 +239,7 @@ useEffect(() => {
 
       return sameMonth && topTypeMatch && modalTypeMatch && accountMatch;
     });
-  }, [transactions, filter, monthRange, selectedType, selectedAccountId]);
+  }, [transactions, filterType, monthRange, selectedType, selectedAccountId]);
 
 const calendarDays = useMemo(() => {
   const days: (Date | null)[] = [];
@@ -307,16 +301,29 @@ const selectedDayTransactions = useMemo(() => {
     setEditToAccountId(tx.toAccountId ? String(tx.toAccountId) : ""); 
   };
 
+  const editCategories = useMemo(() => {
+  const base = getBaseCategories(editType);
+
+  const custom = serverCategories
+    .filter((cat) => cat.type === editType)
+    .map((cat) => cat.name)
+    .filter((name, index, self) => !base.includes(name) && self.indexOf(name) === index);
+
+  return [...base, ...custom];
+}, [editType, serverCategories]);
+
   const closeEditSheet = () => {
     setSelectedTx(null);
     setEditAmount("");
     setEditMemo("");
   };
 
-  const changeEditType = (nextType: TransactionType) => {
-    setEditType(nextType);
-    setEditCategory(getEditCategories(nextType)[0]);
-  };
+const changeEditType = (nextType: TransactionType) => {
+  const baseCategories = getBaseCategories(nextType);
+
+  setEditType(nextType);
+  setEditCategory(baseCategories[0]);
+};
 
   const updateTransaction = async () => {
     if (!selectedTx) return;
@@ -377,6 +384,43 @@ const selectedDayTransactions = useMemo(() => {
     setSelectedDay(null);
     };
 
+    const setTopFilter = (nextFilter: FilterType) => {
+      setFilterType(nextFilter);
+      setSelectedDay(null);
+
+      if (nextFilter === "CALENDAR") {
+        setViewMode("CALENDAR");
+        return;
+      }
+
+      setViewMode("LIST");
+    };
+
+    const moveFilter = (direction: "LEFT" | "RIGHT") => {
+      const currentIndex = FILTER_ORDER.indexOf(filterType);
+      if (currentIndex === -1) return;
+
+      const nextIndex =
+        direction === "LEFT"
+          ? Math.min(currentIndex + 1, FILTER_ORDER.length - 1)
+          : Math.max(currentIndex - 1, 0);
+
+      setTopFilter(FILTER_ORDER[nextIndex]);
+    };
+
+    const handleTouchEnd = (endX: number) => {
+      if (touchStartX === null) return;
+
+      const diff = touchStartX - endX;
+
+      if (Math.abs(diff) >= 50) {
+        moveFilter(diff > 0 ? "LEFT" : "RIGHT");
+      }
+
+      setTouchStartX(null);
+    };
+
+
   const formatAmount = (tx: Transaction) => {
     const sign = tx.type === "INCOME" ? "+" : tx.type === "EXPENSE" ? "-" : "";
     return `${sign}₩${Math.abs(Number(tx.amount)).toLocaleString()}`;
@@ -430,55 +474,43 @@ const getAccountText = (tx: Transaction) => {
 
         <div style={topFilterGridStyle}>
         <TopFilterButton
-        label="달력"
-        icon={CalendarDays}
-        active={viewMode === "CALENDAR"}
-        color={theme.colors.primary}
-        onClick={() => {
-            setFilter("ALL");
-            setSelectedDay(null);
-            setViewMode("CALENDAR");
-        }}
+          label="달력"
+          icon={CalendarDays}
+          active={filterType === "CALENDAR"}
+          color={theme.colors.primary}
+          onClick={() => setTopFilter("CALENDAR")}
         />
+
         <TopFilterButton
-            label="전체"
-            icon={List}
-            active={filter === "ALL" && viewMode === "LIST"}
-            color={theme.colors.primary}
-            onClick={() => {
-            setFilter("ALL");
-            setViewMode("LIST");
-            }}
+          label="전체"
+          icon={List}
+          active={filterType === "ALL"}
+          color={theme.colors.primary}
+          onClick={() => setTopFilter("ALL")}
         />
+
         <TopFilterButton
-            label="수입"
-            icon={CircleDollarSign}
-            active={filter === "INCOME" && viewMode === "LIST"}
-            color={theme.colors.income}
-            onClick={() => {
-            setFilter("INCOME");
-            setViewMode("LIST");
-            }}
+          label="수입"
+          icon={CircleDollarSign}
+          active={filterType === "INCOME"}
+          color={theme.colors.income}
+          onClick={() => setTopFilter("INCOME")}
         />
+
         <TopFilterButton
-            label="지출"
-            icon={TrendingDown}
-            active={filter === "EXPENSE" && viewMode === "LIST"}
-            color={theme.colors.expense}
-            onClick={() => {
-            setFilter("EXPENSE");
-            setViewMode("LIST");
-            }}
+          label="지출"
+          icon={TrendingDown}
+          active={filterType === "EXPENSE"}
+          color={theme.colors.expense}
+          onClick={() => setTopFilter("EXPENSE")}
         />
+
         <TopFilterButton
-            label="이체"
-            icon={ArrowLeftRight}
-            active={filter === "TRANSFER" && viewMode === "LIST"}
-            color={theme.colors.primary}
-            onClick={() => {
-            setFilter("TRANSFER");
-            setViewMode("LIST");
-            }}
+          label="이체"
+          icon={ArrowLeftRight}
+          active={filterType === "TRANSFER"}
+          color={theme.colors.primary}
+          onClick={() => setTopFilter("TRANSFER")}
         />
 
         </div>
@@ -527,15 +559,20 @@ const getAccountText = (tx: Transaction) => {
         </div>
 
         <div style={sectionTitleStyle}>
-        {filter === "ALL"
+        {filterType === "ALL"
             ? "전체 거래내역"
-            : filter === "INCOME"
+            : filterType === "INCOME"
             ? "수입 내역"
-            : filter === "EXPENSE"
+            : filterType === "EXPENSE"
             ? "지출 내역"
             : "이체 내역"}{" "}
         · {filteredTransactions.length}건
         </div>
+
+        <div
+  onTouchStart={(e) => setTouchStartX(e.touches[0].clientX)}
+  onTouchEnd={(e) => handleTouchEnd(e.changedTouches[0].clientX)}
+>
 
 {viewMode === "CALENDAR" ? (
   <>
@@ -600,7 +637,8 @@ const getAccountText = (tx: Transaction) => {
     ) : (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {selectedDayTransactions.map((tx) => {
-          const iconData = getIconData(tx.category);
+          getIconData(tx.category, serverCategories)
+          const iconData = getIconData(tx.category, serverCategories);
           const Icon = iconData.icon;
 
           return (
@@ -655,8 +693,9 @@ const getAccountText = (tx: Transaction) => {
       <div style={emptyStyle}>해당 월의 거래내역이 없습니다.</div>
     ) : (
       filteredTransactions.map((tx) => {
-        if (filter !== "ALL" && tx.type !== filter) return null;
-        const iconData = getIconData(tx.category);
+        if (filterType !== "ALL" && tx.type !== filterType) return null;
+        getIconData(tx.category, serverCategories)
+        const iconData = getIconData(tx.category, serverCategories);
         const Icon = iconData.icon;
 
         return (
@@ -707,9 +746,19 @@ const getAccountText = (tx: Transaction) => {
   </section>
 )}
 
+</div>
+
 {showFilterModal && (
   <div style={overlayStyle} onClick={() => setShowFilterModal(false)}>
-    <section style={sheetStyle} onClick={(e) => e.stopPropagation()}>
+    <section
+        style={{
+          ...sheetStyle,
+          maxHeight: "calc(100vh - 96px)",
+          overflowY: "auto",
+          paddingBottom: 120,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
       <div style={sheetHeaderStyle}>
         <strong>상세 필터</strong>
         <button
@@ -741,7 +790,7 @@ const getAccountText = (tx: Transaction) => {
         <option value="">전체 계좌</option>
         {accounts.map((account) => (
           <option key={account.id} value={account.id}>
-            {account.name}
+            {getAccountOwnerLabel(account)} · {account.name}
           </option>
         ))}
       </select>
@@ -773,7 +822,15 @@ const getAccountText = (tx: Transaction) => {
 
       {selectedTx && (
         <div style={overlayStyle} onClick={closeEditSheet}>
-          <section style={sheetStyle} onClick={(e) => e.stopPropagation()}>
+          <section
+              style={{
+                ...sheetStyle,
+                maxHeight: "calc(100vh - 96px)",
+                overflowY: "auto",
+                paddingBottom: 120,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
             <div style={sheetHeaderStyle}>
               <strong>거래 수정</strong>
               <button onClick={closeEditSheet} style={plainButtonStyle}>
@@ -800,8 +857,10 @@ const getAccountText = (tx: Transaction) => {
               onChange={(e) => setEditCategory(e.target.value)}
               style={inputStyle}
             >
-              {getEditCategories(editType).map((item) => (
-                <option key={item}>{item}</option>
+             {editCategories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
               ))}
             </select>
 
@@ -823,7 +882,7 @@ const getAccountText = (tx: Transaction) => {
       <option value="">출금 계좌 선택</option>
       {accounts.map((account) => (
         <option key={account.id} value={account.id}>
-          출금 · {account.name}
+          출금 · {getAccountOwnerLabel(account)} · {account.name}
         </option>
       ))}
     </select>
@@ -836,21 +895,30 @@ const getAccountText = (tx: Transaction) => {
       <option value="">입금 계좌 선택</option>
       {accounts.map((account) => (
         <option key={account.id} value={account.id}>
-          입금 · {account.name}
+          입금 · {getAccountOwnerLabel(account)} · {account.name}
         </option>
       ))}
     </select>
   </div>
 ) : (
-  <select
-    value={editFromAccountId}
-    onChange={(e) => setEditFromAccountId(e.target.value)}
-    style={inputStyle}
-  >
+    <select
+      value={editType === "INCOME" ? editToAccountId : editFromAccountId}
+      onChange={(e) => {
+        if (editType === "INCOME") {
+          setEditToAccountId(e.target.value);
+          setEditFromAccountId("");
+          return;
+        }
+
+        setEditFromAccountId(e.target.value);
+        setEditToAccountId("");
+      }}
+      style={inputStyle}
+    >
     <option value="">계좌 선택</option>
     {accounts.map((account) => (
       <option key={account.id} value={account.id}>
-        {account.name}
+        {getAccountOwnerLabel(account)} · {account.name}
       </option>
     ))}
   </select>
@@ -939,6 +1007,15 @@ function TopFilterButton({
     </button>
   );
 }
+const getAccountOwnerLabel = (account: any) => {
+  const myName = localStorage.getItem("alien_my_name") || "나";
+  const partnerName = localStorage.getItem("alien_partner_name") || "파트너";
+
+  if (account.owner?.role === "OWNER") return myName;
+  if (account.owner?.role === "MEMBER") return partnerName;
+
+  return "공동";
+};
 
 function EditTypeButton({
   label,
@@ -1086,20 +1163,22 @@ const emptyStyle = {
 const overlayStyle = {
   position: "fixed",
   inset: 0,
+  paddingBottom: 82,
   background: "rgba(24,17,27,0.28)",
   display: "flex",
   alignItems: "flex-end",
   justifyContent: "center",
   zIndex: 50,
-  padding: 0,
 } as const;
 
 const sheetStyle = {
   width: "100%",
   maxWidth: 390,
+  maxHeight: "calc(100vh - 82px)",
+  overflowY: "auto",
   background: "white",
   borderRadius: "26px 26px 0 0",
-  padding: "18px 18px 24px",
+  padding: "18px 18px 120px",
   boxShadow: "0 -18px 50px rgba(0,0,0,0.16)",
 } as const;
 
@@ -1300,6 +1379,7 @@ const accountTextStyle = {
 } as const;
 
 export default function TransactionsPage() {
+
   return (
     <Suspense fallback={null}>
       <TransactionsContent />

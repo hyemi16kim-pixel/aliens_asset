@@ -32,6 +32,7 @@ type Account = {
   maturityDate?: string | null;
   monthlyPayment?: number | null;
   displayOrder?: number;
+  sourceKey?: string | null;
   ownerId?: number | null;
   owner?: {
     id: number;

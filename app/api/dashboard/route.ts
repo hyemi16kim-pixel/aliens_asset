@@ -71,6 +71,9 @@ export async function GET(req: NextRequest) {
       await Promise.all([
         prisma.account.findMany({
           where: { familyId: 1 },
+          include: {
+            stockHoldings: true,
+          },
         }),
 
         prisma.transaction.findMany({
@@ -125,11 +128,19 @@ export async function GET(req: NextRequest) {
         }),
       ]);
 
-    const totalAsset = accounts.reduce(
-      (sum: number, account: any) =>
-      sum + Number(account.balance || 0),
+const totalAsset = accounts.reduce((sum: number, account: any) => {
+  if (account.type === "STOCK") {
+    const stockValue = (account.stockHoldings || []).reduce(
+      (stockSum: number, holding: any) =>
+        stockSum + Number(holding.quantity || 0) * Number(holding.avgPrice || 0),
       0
     );
+
+    return sum + Number(account.stockCash || 0) + stockValue;
+  }
+
+  return sum + Number(account.balance || 0);
+}, 0);
 
    const debtAmount = accounts
   .filter((account: any) => account.type === "LOAN" || account.type === "CARD")

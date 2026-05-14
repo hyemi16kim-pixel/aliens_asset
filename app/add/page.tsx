@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import BottomNav from "@/components/navigation/BottomNav";
 import { theme } from "@/components/lib/theme";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { readRecentSms } from "@/components/lib/smsReader";
+
 import {
   X,
   CalendarDays,
@@ -45,6 +47,7 @@ type Account = {
   name: string;
   type: string;
   balance: number;
+  sourceKey?: string | null;
   owner?: {
     id: number;
     name: string;
@@ -124,18 +127,24 @@ export default function AddTransactionPage() {
   const [myName, setMyName] = useState("민준");
   const [partnerName, setPartnerName] = useState("지영");
   const [accounts, setAccounts] = useState<Account[]>([]);
-
+  const [favoriteAccountIds, setFavoriteAccountIds] = useState<string[]>([]);
   const [fromAccountId, setFromAccountId] = useState("");
   const [toAccountId, setToAccountId] = useState("");
   const [type, setType] = useState<TransactionType>("EXPENSE");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("식비");
   const [memo, setMemo] = useState("");
-  const [owner, setOwner] = useState("공동");
+  const [owner, setOwner] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [repeat, setRepeat] = useState("반복 안함");
   const [showOptions, setShowOptions] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [inputMode, setInputMode] = useState<"MANUAL" | "IMPORT">("MANUAL");
+
+
+  const [usedImportIds, setUsedImportIds] = useState<string[]>([]);
+  const [selectedImportId, setSelectedImportId] = useState<string>("");
+
 
   const [stockTradeType, setStockTradeType] = useState<"BUY" | "SELL">("BUY");
   const [stockAccountId, setStockAccountId] = useState("");
@@ -149,21 +158,65 @@ export default function AddTransactionPage() {
 
   const [favoriteCategories, setFavoriteCategories] = useState<string[]>([]);
   const [customCategories, setCustomCategories] = useState<
-    { name: string; iconKey: string }[]
+    { id?: number; name: string; iconKey: string }[]
   >([]);
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryIconKey, setNewCategoryIconKey] = useState("생활");
-const categoryScrollRef = useRef<HTMLDivElement | null>(null);
-const dragStartX = useRef(0);
-const dragScrollLeft = useRef(0);
-const isDragging = useRef(false);
+  const [isLongPress, setIsLongPress] = useState(false);
+  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
+  const [categoryToDelete, setCategoryToDelete] = useState<number | null>(null);
+  const categoryScrollRef = useRef<HTMLDivElement | null>(null);
+  const dragStartX = useRef(0);
+  const dragScrollLeft = useRef(0);
+  const isDragging = useRef(false);
+type ImportedMessage = {
+  receivedAt: string;
+  id: string;
+  sourceType: "SMS" | "KAKAO";
+  sourceKey: string;
+  rawText: string;
+};
+
+const [importedMessages, setImportedMessages] = useState<ImportedMessage[]>([]);
+const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+
+
+const parseImportedMessage = (message: ImportedMessage) => {
+  const raw = message.rawText;
+
+  const amountMatch = raw.match(/(입금|출금|승인|결제)\s?([\d,]+)원?/);
+  const dateMatch = raw.match(/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/);
+  const accountMatch = raw.match(/<([^>]+)>/);
+
+  const action = amountMatch?.[1] || "";
+  const amount = Number((amountMatch?.[2] || "0").replace(/,/g, ""));
+  const accountNameHint = accountMatch?.[1] || "";
+
+  const currentYear = new Date().getFullYear();
+  const date = dateMatch
+    ? `${currentYear}-${dateMatch[1]}-${dateMatch[2]}`
+    : new Date().toISOString().slice(0, 10);
+
+  const parsedType =
+    action === "입금" ? "INCOME" : "EXPENSE";
+
+  return {
+    type: parsedType as TransactionType,
+    amount,
+    category: parsedType === "INCOME" ? "수입" : "식비",
+    memo: raw.split("\n").find((line) => line.includes(action)) || raw,
+    date,
+    accountNameHint,
+  };
+};
 
   const activeColor = typeColorMap[type];
   const activeSoftColor = typeSoftColorMap[type];
   const customIconList = customIconMap[type];
   const defaultCategories = categoryMap[type];
 
+  
   const customMappedCategories = customCategories.map((item) => {
     const foundIcon =
       customIconList.find((iconItem) => iconItem.key === item.iconKey)?.icon ||
@@ -185,19 +238,41 @@ const isDragging = useRef(false);
   }, [categories, favoriteCategories]);
 
   useEffect(() => {
+    const saved = localStorage.getItem("alien_used_import_ids");
+
+    if (saved) {
+      setUsedImportIds(JSON.parse(saved));
+    }
+  }, []);
+
+  useEffect(() => {
     setMyName(localStorage.getItem("alien_my_name") || "민준");
     setPartnerName(localStorage.getItem("alien_partner_name") || "지영");
-
-    fetch("/api/accounts")
+    setFavoriteAccountIds(
+      JSON.parse(localStorage.getItem("alien_favorite_account_ids") || "[]")
+    );
+    fetch("/api/accounts/simple")
       .then((res) => res.json())
       .then((data) => {
         const accountList = Array.isArray(data) ? data : data.accounts || [];
         setAccounts(accountList);
-        if (accountList?.[0]) setFromAccountId(String(accountList[0].id));
-        if (accountList?.[1]) setToAccountId(String(accountList[1].id));
+
+        
       })
       .catch(console.error);
   }, []);
+
+  const myAccounts = accounts.filter(
+      (account) => account.owner?.name === myName
+    );
+
+    const partnerAccounts = accounts.filter(
+      (account) => account.owner?.name === partnerName
+    );
+
+    const sharedAccounts = accounts.filter(
+      (account) => !account.owner?.name
+    );
 
   useEffect(() => {
     if (type !== "STOCK" || !stockAccountId) return;
@@ -224,25 +299,86 @@ const isDragging = useRef(false);
   }, [type, stockAccountId]);
 
 
+  // 카테고리 로드
   useEffect(() => {
-    const savedFavorites = localStorage.getItem(
-      `alien_favorite_categories_${type}`
-    );
+    const loadCategories = async () => {
+      try {
+        // 서버에서 카테고리 로드
+        const res = await fetch(`/api/categories?familyId=1&type=${type}`);
+        const data = await res.json();
+        
+        if (Array.isArray(data)) {
+          // 서버에서 받은 카테고리 처리
+          const serverCategories = data.map(cat => ({
+            id: cat.id,
+            name: cat.name,
+            iconKey: cat.name // 아이콘 키는 이름과 동일하게 설정 (기본값)
+          }));
+          
+          // 기본 카테고리 제외한 커스텀 카테고리만 설정
+          const defaultNames = categoryMap[type].map(c => c.name);
+          const customCats = serverCategories.filter(
+            (cat, index, self) =>
+              !defaultNames.includes(cat.name) &&
+              self.findIndex((item) => item.name === cat.name) === index
+          );
+          
+          setCustomCategories(customCats);
+        }
+        
+        // 즐겨찾기는 여전히 로컬에 저장
+        const savedFavorites = localStorage.getItem(
+          `alien_favorite_categories_${type}`
+        );
 
-    const fallback =
-      type === "EXPENSE"
-        ? ["식비", "카페", "쇼핑"]
-        : type === "INCOME"
-        ? ["수입"]
-        : ["이체"];
+        const fallback =
+          type === "EXPENSE"
+            ? ["식비", "카페", "쇼핑"]
+            : type === "INCOME"
+            ? ["수입"]
+            : ["이체"];
 
-    setFavoriteCategories(savedFavorites ? JSON.parse(savedFavorites) : fallback);
+        setFavoriteCategories(savedFavorites ? JSON.parse(savedFavorites) : fallback);
+      } catch (error) {
+        console.error("카테고리 로드 오류:", error);
+        
+        
+        const savedFavorites = localStorage.getItem(
+          `alien_favorite_categories_${type}`
+        );
 
-    const savedCustom = localStorage.getItem(`alien_custom_categories_${type}`);
-    setCustomCategories(savedCustom ? JSON.parse(savedCustom) : []);
+        const fallback =
+          type === "EXPENSE"
+            ? ["식비", "카페", "쇼핑"]
+            : type === "INCOME"
+            ? ["수입"]
+            : ["이체"];
 
-    setShowAddCategory(false);
+        setFavoriteCategories(savedFavorites ? JSON.parse(savedFavorites) : fallback);
+      }
+      
+      setShowAddCategory(false);
+    };
+    
+    loadCategories();
   }, [type]);
+
+  const toggleFavoriteAccount = (accountId: string) => {
+    const next = favoriteAccountIds.includes(accountId)
+      ? favoriteAccountIds.filter((id) => id !== accountId)
+      : [...favoriteAccountIds, accountId];
+
+    setFavoriteAccountIds(next);
+    localStorage.setItem("alien_favorite_account_ids", JSON.stringify(next));
+  };
+
+  const sortAccountsByFavorite = (list: Account[]) => {
+    return [...list].sort((a, b) => {
+      const aFav = favoriteAccountIds.includes(String(a.id)) ? 0 : 1;
+      const bFav = favoriteAccountIds.includes(String(b.id)) ? 0 : 1;
+      return aFav - bFav;
+    });
+  };
 
   const changeType = (nextType: TransactionType) => {
     setType(nextType);
@@ -266,7 +402,7 @@ const isDragging = useRef(false);
     );
   };
 
-  const addCustomCategory = () => {
+  const addCustomCategory = async () => {
     const name = newCategoryName.trim();
 
     if (!name) {
@@ -279,21 +415,45 @@ const isDragging = useRef(false);
       return;
     }
 
-    const next = [
-      ...customCategories,
-      {
-        name,
-        iconKey: newCategoryIconKey,
-      },
-    ];
+    try {
+      // 서버에 카테고리 추가
+      const res = await fetch("/api/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          familyId: 1,
+          name,
+          type,
+          displayOrder: customCategories.length
+        }),
+      });
 
-    setCustomCategories(next);
-    localStorage.setItem(`alien_custom_categories_${type}`, JSON.stringify(next));
+      if (!res.ok) {
+        throw new Error("카테고리 추가 실패");
+      }
 
-    setCategory(name);
-    setNewCategoryName("");
-    setNewCategoryIconKey("생활");
-    setShowAddCategory(false);
+      const newCategory = await res.json();
+      const refreshRes = await fetch(`/api/categories?familyId=1&type=${type}`);
+      const refreshData = await refreshRes.json();
+
+      setCustomCategories(
+        Array.isArray(refreshData)
+          ? refreshData.map((item) => ({
+              id: item.id,
+              name: item.name,
+              iconKey: item.iconKey || item.name,
+            }))
+          : []
+      );
+
+      setCategory(name);
+      setNewCategoryName("");
+      setNewCategoryIconKey("생활");
+      setShowAddCategory(false);
+    } catch (error) {
+      console.error("카테고리 추가 오류:", error);
+      alert("카테고리 추가에 실패했습니다.");
+    }
   };
 
 const startCategoryDrag = (clientX: number) => {
@@ -315,13 +475,224 @@ const endCategoryDrag = () => {
   isDragging.current = false;
 };
 
+const startLongPress = (id: number) => {
+  if (longPressTimer) clearTimeout(longPressTimer);
+  
+  const timer = setTimeout(() => {
+    setIsLongPress(true);
+    setCategoryToDelete(id);
+  }, 800); // 0.8초 길게 누르면 삭제 모드
+  
+  setLongPressTimer(timer);
+};
+
+const endLongPress = () => {
+  if (longPressTimer) {
+    clearTimeout(longPressTimer);
+    setLongPressTimer(null);
+  }
+};
+
+const deleteCategory = async (id: number) => {
+  const confirmed = confirm("카테고리를 삭제할까요?");
+
+  if (!confirmed) {
+    setIsLongPress(false);
+    setCategoryToDelete(null);
+    return;
+  }
+  if (!id) return;
+  
+  try {
+    const res = await fetch(`/api/categories?id=${id}`, {
+      method: "DELETE",
+    });
+    
+    if (!res.ok) {
+      throw new Error("카테고리 삭제 실패");
+    }
+    
+    const refreshRes = await fetch(`/api/categories?familyId=1&type=${type}`);
+    const refreshData = await refreshRes.json();
+
+    setCustomCategories(
+      Array.isArray(refreshData)
+        ? refreshData.map((item) => ({
+            id: item.id,
+            name: item.name,
+            iconKey: item.iconKey || item.name,
+          }))
+        : []
+    );
+    // 삭제한 카테고리가 현재 선택된 카테고리라면 기본 카테고리로 변경
+    const deletedCategory = customCategories.find(item => item.id === id);
+    setIsLongPress(false);
+    setCategoryToDelete(null);
+    if (deletedCategory && category === deletedCategory.name) {
+      setCategory(categoryMap[type][0].name);
+    }
+    
+    setCategoryToDelete(null);
+    setIsLongPress(false);
+  } catch (error) {
+    console.error("카테고리 삭제 오류:", error);
+    alert("카테고리 삭제에 실패했습니다.");
+  }
+};
+
+
+const normalizeKey = (value: string) =>
+  String(value || "")
+    .replace(/[^0-9a-zA-Z가-힣]/g, "")
+    .toLowerCase();
+
+const getPartialKeys = (value: string) => {
+  const normalized = normalizeKey(value);
+
+  if (!normalized) return [];
+
+  const parts = value
+    .split(/[\s,./_\-:()[\]<>]+/)
+    .map((item) => normalizeKey(item))
+    .filter((item) => item.length >= 2);
+
+  return Array.from(new Set([normalized, ...parts]));
+};
+
+const bankAliasMap: Record<string, string[]> = {
+  국민: ["국민", "kb"],
+  농협: ["농협", "nh"],
+  신한: ["신한"],
+  우리: ["우리"],
+  하나: ["하나"],
+  새마을금고: ["새마을", "금고", "mg"],
+  카카오: ["카카오", "kakao"],
+  토스: ["토스", "toss"],
+  기업: ["기업", "ibk"],
+  부산: ["부산"],
+  대구: ["대구"],
+  경남: ["경남"],
+  수협: ["수협"],
+};
+
+const loadImportedMessages = async () => {
+  try {
+    setIsLoadingMessages(true);
+
+    const smsList = await readRecentSms(50);
+
+    const nextMessages: ImportedMessage[] = smsList.map((sms) => ({
+      receivedAt: new Date(sms.date).toISOString(),
+      id: `sms-${sms.id}`,
+      sourceType: "SMS",
+      sourceKey: sms.address || "",
+      rawText: sms.body || "",
+    }));
+
+    setImportedMessages(nextMessages);
+  } catch (error) {
+    console.error(error);
+    alert("문자 불러오기에 실패했습니다.");
+  } finally {
+    setIsLoadingMessages(false);
+  }
+};
+
+
+const applyImportedCandidate = (candidate: ImportedMessage) => {
+  if (accounts.length === 0) {
+    alert("계좌 목록을 불러오는 중입니다. 잠시 후 다시 눌러주세요.");
+    return;
+  }
+  const parsed = parseImportedMessage(candidate);
+
+  const sourceKey = normalizeKey(candidate.sourceKey);
+  const bankName = normalizeKey(parsed.accountNameHint || "");
+  const rawKey = normalizeKey(candidate.rawText || "");
+
+  
+  const sourceMatchedAccount = accounts.find((account) => {
+  const accountSourceKey = normalizeKey(account.sourceKey || "");
+  return accountSourceKey && sourceKey && accountSourceKey === sourceKey;
+});
+
+const fullNameMatchedAccount = accounts.find((account) => {
+  const accountName = normalizeKey(account.name || "");
+  return account.type !== "STOCK" && bankName && accountName === bankName;
+});
+
+const sourcePartialMatchedAccount = accounts.find((account) => {
+  const accountSourceKey = normalizeKey(account.sourceKey || "");
+
+  const targetText = normalizeKey(
+    `${candidate.sourceKey || ""} ${candidate.rawText || ""} ${
+      parsed.accountNameHint || ""
+    }`
+  );
+
+  if (!accountSourceKey || accountSourceKey.length < 2) return false;
+
+  return targetText.includes(accountSourceKey);
+});
+const bankPartialMatchedAccount = accounts.find((account) => {
+  const accountName = normalizeKey(account.name || "");
+
+  return (
+    account.type !== "STOCK" &&
+    bankName &&
+    accountName &&
+    (accountName.includes(bankName) || bankName.includes(accountName))
+  );
+});
+
+const matchedAccount =
+  sourceMatchedAccount ||
+  sourcePartialMatchedAccount ||
+  fullNameMatchedAccount ||
+  bankPartialMatchedAccount;
+
+setType(parsed.type);
+setAmount(String(parsed.amount));
+setCategory(parsed.category);
+setMemo(parsed.memo);
+setDate(parsed.date);
+setOwner(myName);
+  const matchedId = matchedAccount ? String(matchedAccount.id) : "";
+
+  setFromAccountId(matchedId);
+  setToAccountId("");
+
+  setInputMode("MANUAL");
+
+  setTimeout(() => {
+    setFromAccountId(matchedId);
+    setToAccountId("");
+  }, 0);
+
+setSelectedImportId(String(candidate.id));
+console.log("MATCH_DEBUG", {
+  sourceKey,
+  bankName,
+  rawText: candidate.rawText,
+  accounts: accounts.map((a) => ({
+    id: a.id,
+    name: a.name,
+    sourceKey: a.sourceKey,
+  })),
+  sourcePartialMatchedAccount,
+  matchedAccount,
+});
+};
+
   const saveTransaction = async () => {
-      if (type !== "STOCK" && !amount) {
-        alert("금액을 입력하세요.");
-        return;
-      }
+    if (isSaving) return;
+
+    if (type !== "STOCK" && !amount) {
+      alert("금액을 입력하세요.");
+      return;
+    }
       if (type === "STOCK") {
-  if (!stockAccountId || !stockName || !stockCode || !stockQuantity || !stockPrice) {
+      if (!stockAccountId || !stockName || !stockCode || !stockQuantity || !stockPrice) {
     alert("주식 거래 정보를 모두 입력하세요.");
     return;
   }
@@ -358,6 +729,8 @@ const endCategoryDrag = () => {
   } finally {
     setIsSaving(false);
   }
+
+  
 
   return;
 }
@@ -396,6 +769,17 @@ const endCategoryDrag = () => {
       });
 
       if (!res.ok) throw new Error("저장 실패");
+      if (selectedImportId) {
+        const nextUsedImportIds = Array.from(
+          new Set([...usedImportIds, selectedImportId])
+        );
+
+        setUsedImportIds(nextUsedImportIds);
+        localStorage.setItem(
+          "alien_used_import_ids",
+          JSON.stringify(nextUsedImportIds)
+        );
+      }
 
       router.push("/transactions");
     } catch (err) {
@@ -409,14 +793,114 @@ const endCategoryDrag = () => {
   return (
     <main style={pageStyle}>
       <div style={containerStyle}>
-        <header style={headerStyle}>
-          <button onClick={() => router.back()} style={iconButtonStyle}>
-            <X size={22} color={theme.colors.subtext} />
-          </button>
-          <strong style={{ fontSize: 18 }}>거래 추가</strong>
-          <div style={{ width: 22 }} />
-        </header>
+       <header style={headerStyle}>
+        <button onClick={() => router.back()} style={iconButtonStyle}>
+          <X size={22} color={theme.colors.subtext} />
+        </button>
 
+        <strong
+        style={{
+          fontSize: 18,
+          textAlign: "center",
+          whiteSpace: "nowrap",
+        }}
+      >
+        거래 추가
+      </strong>
+        <button
+          type="button"
+          onClick={async () => {
+            if (inputMode === "MANUAL") {
+              setInputMode("IMPORT");
+              await loadImportedMessages();
+              return;
+            }
+
+            setInputMode("MANUAL");
+          }}
+          style={{
+            border: `1px solid ${theme.colors.border}`,
+            background: inputMode === "IMPORT" ? theme.colors.primarySoft : "#FFFFFF",
+            color: inputMode === "IMPORT" ? theme.colors.primary : theme.colors.subtext,
+            borderRadius: 999,
+            height: 30,
+            padding: "0 10px",
+            fontSize: 11,
+            fontWeight: 900,
+          }}
+        >
+          {isLoadingMessages
+          ? "불러오는 중..."
+          : inputMode === "MANUAL"
+          ? "불러오기"
+          : "직접입력"}
+        </button>
+      </header>
+{inputMode === "IMPORT" && (
+  <section style={importBoxStyle}>
+    <div style={importHeaderStyle}>
+      <strong>불러온 내역</strong>
+      <span>SMS / 카카오톡 후보</span>
+    </div>
+
+
+{[...new Map(importedMessages.map((item) => [item.rawText, item])).values()]
+  .filter((item) => !usedImportIds.includes(String(item.id)))
+  .sort(
+    (a, b) =>
+      new Date(b.receivedAt).getTime() -
+      new Date(a.receivedAt).getTime()
+  )
+  .map((item) => {
+  const parsed = parseImportedMessage(item);
+
+  return (
+    <div
+      key={item.id}
+      style={{
+        ...importCardStyle,
+        opacity: usedImportIds.includes(item.id) ? 0.45 : 1,
+        filter: usedImportIds.includes(item.id)
+          ? "grayscale(1)"
+          : "none",
+      }}
+    >
+      <div style={{ fontSize: 12, color: theme.colors.subtext }}>
+        {item.sourceType} · {item.sourceKey}
+      </div>
+
+      <strong style={{ fontSize: 16 }}>
+        {parsed.type === "INCOME" ? "+" : "-"}
+        {parsed.amount.toLocaleString()}원
+      </strong>
+
+      <div style={{ fontSize: 13, color: theme.colors.text }}>
+        {parsed.memo}
+      </div>
+
+      <pre style={rawTextStyle}>{item.rawText}</pre>
+
+      <button
+        type="button"
+        disabled={false}
+        onClick={() => applyImportedCandidate(item)}
+        style={{
+          ...importApplyButtonStyle,
+          opacity: usedImportIds.includes(item.id) ? 0.5 : 1,
+          cursor: usedImportIds.includes(item.id)
+            ? "not-allowed"
+            : "pointer",
+        }}
+      >
+        이 내역으로 입력
+      </button>
+    </div>
+  );
+})}
+  </section>
+)}
+{inputMode === "MANUAL" && (
+  <>
         <div style={typeGridStyle}>
           <TypeButton
             active={type === "EXPENSE"}
@@ -481,6 +965,24 @@ const endCategoryDrag = () => {
                     key={item.name}
                     type="button"
                     onClick={() => setCategory(item.name)}
+                    onTouchStart={() => {
+                      // 커스텀 카테고리만 길게 누르기 활성화
+                      const customCat = customCategories.find(c => c.name === item.name);
+                      if (customCat?.id) {
+                        startLongPress(customCat.id);
+                      }
+                    }}
+                    onTouchEnd={endLongPress}
+                    onTouchMove={endLongPress}
+                    onMouseDown={() => {
+                      // 커스텀 카테고리만 길게 누르기 활성화
+                      const customCat = customCategories.find(c => c.name === item.name);
+                      if (customCat?.id) {
+                        startLongPress(customCat.id);
+                      }
+                    }}
+                    onMouseUp={endLongPress}
+                    onMouseLeave={endLongPress}
                     style={{
                       ...categoryChipStyle,
                       border: active
@@ -488,6 +990,7 @@ const endCategoryDrag = () => {
                         : `1px solid ${theme.colors.border}`,
                       background: active ? activeSoftColor : "#FFFFFF",
                       color: active ? activeColor : theme.colors.text,
+                      position: "relative",
                     }}
                   >
                     <Icon
@@ -509,6 +1012,57 @@ const endCategoryDrag = () => {
                         color={favorite ? activeColor : theme.colors.subtext}
                       />
                     </span>
+                    
+                    {/* 삭제 확인 오버레이 */}
+                    {isLongPress && 
+                     categoryToDelete === customCategories.find(c => c.name === item.name)?.id && (
+                      <div 
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          background: "rgba(255,255,255,0.9)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 8,
+                          borderRadius: 999,
+                          zIndex: 10,
+                        }}
+                      >
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteCategory(categoryToDelete);
+                          }}
+                          style={{
+                            border: "none",
+                            background: "#E11D48",
+                            color: "white",
+                            padding: "4px 8px",
+                            borderRadius: 8,
+                            fontSize: 12,
+                          }}
+                        >
+                          삭제
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCategoryToDelete(null);
+                            setIsLongPress(false);
+                          }}
+                          style={{
+                            border: "none",
+                            background: "#F1F1F1",
+                            padding: "4px 8px",
+                            borderRadius: 8,
+                            fontSize: 12,
+                          }}
+                        >
+                          취소
+                        </button>
+                      </div>
+                    )}
                   </button>
                 );
               })}
@@ -726,13 +1280,11 @@ const endCategoryDrag = () => {
     {type === "TRANSFER" ? (
       <div style={{ display: "grid", gap: 10 }}>
         <AccountSelect
-          label="출금"
           value={fromAccountId}
           accounts={accounts}
           onChange={setFromAccountId}
         />
         <AccountSelect
-          label="입금"
           value={toAccountId}
           accounts={accounts}
           onChange={setToAccountId}
@@ -816,9 +1368,13 @@ const endCategoryDrag = () => {
           {isSaving ? "저장 중..." : "저장"}
         </button>
 
+      </>
+    )}
+    
         <BottomNav />
       </div>
     </main>
+    
   );
 }
 
@@ -893,34 +1449,237 @@ function UserButton({
 }
 
 function AccountSelect({
-  label,
+  label = "",
   value,
   accounts,
   onChange,
 }: {
-  label: string;
+  label?: string;
   value: string;
   accounts: Account[];
   onChange: (value: string) => void;
 }) {
+  const myAccounts = accounts.filter((account) => account.owner?.role === "OWNER");
+  const partnerAccounts = accounts.filter((account) => account.owner?.role === "MEMBER");
+  const sharedAccounts = accounts.filter((account) => !account.owner?.role);
+  const [favoriteAccountIds, setFavoriteAccountIds] = useState<string[]>(() => {
+  if (typeof window === "undefined") return [];
+
+  return JSON.parse(
+    localStorage.getItem("alien_favorite_account_ids") || "[]"
+  );
+});
+
+const toggleFavoriteAccount = (accountId: string) => {
+  const next = favoriteAccountIds.includes(accountId)
+    ? favoriteAccountIds.filter((id: string) => id !== accountId)
+    : [...favoriteAccountIds, accountId];
+
+  setFavoriteAccountIds(next);
+
+  localStorage.setItem(
+    "alien_favorite_account_ids",
+    JSON.stringify(next)
+  );
+};
+  const sortAccountsByFavorite = (list: Account[]) => {
+    return [...list].sort((a, b) => {
+      const aFav = favoriteAccountIds.includes(String(a.id)) ? 0 : 1;
+      const bFav = favoriteAccountIds.includes(String(b.id)) ? 0 : 1;
+      return aFav - bFav;
+    });
+  };
   return (
-    <div style={accountSelectWrapStyle}>
-      <span style={accountSelectLabelStyle}>{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={accountSelectStyle}
-      >
-        <option value="">계좌 선택</option>
-        {accounts.map((account) => (
-          <option key={account.id} value={account.id}>
-            {getAccountOwnerLabel(account)} · {account.name}
-          </option>
-        ))}
-      </select>
+    <div style={{ display: "grid", gap: 12 }}>
+      <AccountGroup
+        title="내 계좌"
+        accounts={sortAccountsByFavorite(myAccounts)}
+        selectedId={value}
+        favoriteAccountIds={favoriteAccountIds}
+        onToggleFavorite={toggleFavoriteAccount}
+        onSelect={onChange}
+      />
+      <AccountGroup
+        title="파트너 계좌"
+        accounts={sortAccountsByFavorite(partnerAccounts)}
+        selectedId={value}
+        favoriteAccountIds={favoriteAccountIds}
+        onToggleFavorite={toggleFavoriteAccount}
+        onSelect={onChange}
+      />
+
+      <AccountGroup
+        title="공동 계좌"
+        accounts={sortAccountsByFavorite(sharedAccounts)}
+        selectedId={value}
+        favoriteAccountIds={favoriteAccountIds}
+        onToggleFavorite={toggleFavoriteAccount}
+        onSelect={onChange}
+      />
     </div>
   );
 }
+
+function AccountGroup({
+  title,
+  accounts,
+  selectedId,
+  favoriteAccountIds,
+  onToggleFavorite,
+  onSelect,
+}: {
+    title: string;
+    accounts: Account[];
+    selectedId: string;
+    favoriteAccountIds: string[];
+    onToggleFavorite: (accountId: string) => void;
+    onSelect: (value: string) => void;
+}) {
+  if (accounts.length === 0) return null;
+
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 900,
+          color: theme.colors.subtext,
+          paddingLeft: 2,
+        }}
+      >
+        {title}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          overflowX: "auto",
+          paddingBottom: 4,
+        }}
+      >
+        {accounts.map((account) => {
+          const selected = String(selectedId) === String(account.id);
+          const balance =
+            account.type === "CARD"
+              ? Math.abs(Number(account.balance || 0))
+              : Number(account.balance || 0);
+
+          return (
+            <button
+              key={account.id}
+              type="button"
+              onClick={() => onSelect(String(account.id))}
+              style={{
+                width: 122,
+                height: 62,
+                flex: "0 0 122px",
+                position: "relative",
+                borderRadius: 18,
+                border: selected
+                  ? `1.5px solid ${theme.colors.primary}`
+                  : `1px solid ${theme.colors.border}`,
+                background: selected ? theme.colors.primarySoft : "#FFFFFF",
+                padding: "10px 28px 10px 12px",
+                display: "flex",
+                alignItems: "center",
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                
+
+                <div>
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 4,
+    }}
+  >
+    <div
+      style={{
+        fontSize: 14,
+        fontWeight: 900,
+        color: theme.colors.text,
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        maxWidth: 78,
+      }}
+    >
+      {account.name}
+    </div>
+
+    <div
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggleFavorite(String(account.id));
+      }}
+      style={{
+        position: "absolute",
+        top: 10,
+        right: 9,
+        border: "none",
+        background: "transparent",
+        padding: 0,
+        width: 16,
+        height: 16,
+        display: "grid",
+        placeItems: "center",
+        cursor: "pointer",
+      }}
+    >
+      <Star
+        size={13}
+        fill={
+          favoriteAccountIds.includes(String(account.id))
+            ? theme.colors.primary
+            : "none"
+        }
+        color={
+          favoriteAccountIds.includes(String(account.id))
+            ? theme.colors.primary
+            : theme.colors.subtext
+        }
+      />
+    </div>
+  </div>
+
+  <div
+    style={{
+      fontSize: 11,
+      fontWeight: 800,
+      color: theme.colors.subtext,
+      marginTop: 2,
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      maxWidth:78,
+    }}
+  >
+    {account.type}
+  </div>
+</div>
+              </div>
+
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const getAccountIcon = (type: string) => {
+  if (type === "BANK") return "🏦";
+  if (type === "STOCK") return "📈";
+  if (type === "CARD") return "💳";
+  if (type === "SAVING") return "🐷";
+  if (type === "CASH") return "💵";
+  return "🛸";
+};
 
 const pageStyle = {
   minHeight: "100vh",
@@ -938,11 +1697,13 @@ const containerStyle = {
   gap: 16,
 } as const;
 
-const headerStyle = {
-  display: "flex",
+const headerStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "36px 1fr 86px",
   alignItems: "center",
-  justifyContent: "space-between",
-} as const;
+  gap: 8,
+  marginBottom: 20,
+};
 
 const iconButtonStyle = {
   border: "none",
@@ -1210,4 +1971,45 @@ const amountPlaceholderStyle = {
   fontWeight: 950,
   color: theme.colors.subtext,
   pointerEvents: "none",
+} as const;
+
+const importBoxStyle = {
+  display: "grid",
+  gap: 12,
+} as const;
+
+const importHeaderStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  fontSize: 13,
+  color: theme.colors.subtext,
+} as const;
+
+const importCardStyle = {
+  border: `1px solid ${theme.colors.border}`,
+  borderRadius: 22,
+  padding: 16,
+  background: "#FFFFFF",
+  display: "grid",
+  gap: 8,
+} as const;
+
+const rawTextStyle = {
+  margin: 0,
+  padding: 12,
+  borderRadius: 16,
+  background: "#F8F5FF",
+  color: theme.colors.subtext,
+  fontSize: 12,
+  whiteSpace: "pre-wrap",
+} as const;
+
+const importApplyButtonStyle = {
+  height: 46,
+  border: "none",
+  borderRadius: 16,
+  background: theme.colors.primary,
+  color: "#FFFFFF",
+  fontWeight: 900,
 } as const;

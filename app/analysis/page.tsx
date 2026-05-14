@@ -145,6 +145,7 @@ type Account = {
   stockCash?: number | null;
   type: string;
   balance: number;
+  
   color?: string | null;
   cardPaymentDay?: number | null;
   cardCycleStartDay?: number | null;
@@ -154,6 +155,7 @@ type Account = {
   nextMonthAmount?: number | null;
   maturityDate?: string | null;
   monthlyPayment?: number | null;
+  sourceKey?: string | null;
   
   displayOrder?: number;
   ownerId?: number | null;
@@ -174,6 +176,7 @@ export default function AnalysisPage() {
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [accountName, setAccountName] = useState("");
   const [accountType, setAccountType] = useState("BANK");
+  
   const [accountBalance, setAccountBalance] = useState("");
   const [nextPaymentDate, setNextPaymentDate] = useState("");
   const [nextPaymentAmount, setNextPaymentAmount] = useState("");
@@ -184,13 +187,15 @@ export default function AnalysisPage() {
   const [cardCycleStartDay, setCardCycleStartDay] = useState("");
   const [cardCycleEndDay, setCardCycleEndDay] = useState("");
   const [selectedStockAccount, setSelectedStockAccount] = useState<Account | null>(null);
-const [trendMoneyType, setTrendMoneyType] = useState<"EXPENSE" | "INCOME">("EXPENSE");
-  
-const [monthStartDay, setMonthStartDay] = useState(1);
-const [trendMonth, setTrendMonth] = useState(() => {
-  const today = new Date();
-  return new Date(today.getFullYear(), today.getMonth(), 1);
-});
+  const [trendMoneyType, setTrendMoneyType] = useState<"EXPENSE" | "INCOME">("EXPENSE");
+    
+  const [monthStartDay, setMonthStartDay] = useState(1);
+  const [trendMonth, setTrendMonth] = useState(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  });
+  const [accountSourceKey, setAccountSourceKey] = useState("");
+
 
 const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
   label: string;
@@ -558,6 +563,8 @@ const getPercent = (owner: string) => {
                 setCardCycleStartDay(account.cardCycleStartDay ? String(account.cardCycleStartDay) : "");
                 setCardCycleEndDay(account.cardCycleEndDay ? String(account.cardCycleEndDay) : "");
                 setAccountName(account.name);
+                setAccountSourceKey(account.sourceKey || "");
+
                 setAccountType(account.type);
                 setAccountBalance(String(account.balance));
                 setAccountOwnerId(account.ownerId ? String(account.ownerId) : "");
@@ -869,6 +876,12 @@ const lastMonthExpenses = expenses.filter((tx) =>
         placeholder="자산 이름"
         style={inputStyle}
       />
+      <input
+        value={accountSourceKey}
+        onChange={(e) => setAccountSourceKey(e.target.value)}
+        placeholder="전화번호 / 카카오 이름"
+        style={inputStyle}
+      />
 <select
   value={accountOwnerId}
   onChange={(e) => setAccountOwnerId(e.target.value)}
@@ -1006,7 +1019,9 @@ const lastMonthExpenses = expenses.filter((tx) =>
 
       setShowAccountModal(false);
       setEditingAccount(null);
+      setAccountSourceKey("");
       setAccountName("");
+      setAccountSourceKey("");
       setAccountType("BANK");
       setAccountBalance("");
       setMaturityDate("");
@@ -1036,6 +1051,7 @@ const lastMonthExpenses = expenses.filter((tx) =>
         cardCycleStartDay: cardCycleStartDay ? Number(cardCycleStartDay) : null,
         cardCycleEndDay: cardCycleEndDay ? Number(cardCycleEndDay) : null,
         name: accountName,
+        sourceKey: accountSourceKey || null,
         type: accountType,
         balance: Number(accountBalance || 0),
         color: accountColor,
@@ -1080,6 +1096,7 @@ const lastMonthExpenses = expenses.filter((tx) =>
 
     setShowAccountModal(false);
     setEditingAccount(null);
+    setAccountSourceKey("");
     
     await fetchAccounts();
   }}

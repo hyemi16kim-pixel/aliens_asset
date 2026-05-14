@@ -61,21 +61,7 @@ export async function GET(req: NextRequest) {
         };
       })
     );
-        const totalMarketValue = result.reduce(
-          (sum: number, item: any) => sum + item.marketValue,
-          0
-        );
-
-        const account = await prisma.account.findUnique({
-        where: { id: accountId },
-        });
-
-        await prisma.account.update({
-        where: { id: accountId },
-        data: {
-            balance: Math.round(totalMarketValue + Number(account?.stockCash || 0)),
-        },
-        });
+        
 
     return NextResponse.json(result);
   } catch (error: any) {

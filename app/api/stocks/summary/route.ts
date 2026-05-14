@@ -37,35 +37,51 @@ export async function GET(req: NextRequest) {
       where: { accountId },
     });
 
-    const stockCash = Number(account?.stockCash || 0);
+    // 순입금액 = 예수금
+    const netDeposit = Number(account?.stockCash || 0);
 
+    // 배당금 거래 조회 (category가 "배당금"인 수입 거래)
+    const dividendTransactions = await prisma.transaction.findMany({
+      where: {
+        familyId: 1,
+        type: "INCOME",
+        category: "배당금",
+        toAccountId: accountId,
+      },
+    });
+
+    // 배당금 합계 (배당금은 예수금으로 처리)
+    const totalDividend = dividendTransactions.reduce(
+      (sum, tx) => sum + Number(tx.amount || 0),
+      0
+    );
+
+    // 주식 현평가액 계산
     let currentStockValue = 0;
-    let buyStockValue = 0;
 
     for (const item of holdings) {
       const currentPrice =
         (await getNaverStockPrice(item.code)) || item.avgPrice;
 
       currentStockValue += currentPrice * item.quantity;
-      buyStockValue += item.avgPrice * item.quantity;
     }
 
-    const totalValue = stockCash + currentStockValue;
-    const baseValue = stockCash + buyStockValue;
-    const profitAmount = totalValue - baseValue;
-    const profitRate = baseValue > 0 ? (profitAmount / baseValue) * 100 : 0;
+const purchaseAmount = holdings.reduce(
+  (sum, item) =>
+    sum + Number(item.quantity || 0) * Number(item.avgPrice || 0),
+  0
+);
 
-    await prisma.account.update({
-      where: { id: accountId },
-      data: { balance: Math.round(totalValue) },
-    });
+const profitAmount = totalDividend + currentStockValue - purchaseAmount;
+
+const profitRate =
+  purchaseAmount > 0 ? (profitAmount / purchaseAmount) * 100 : 0;
 
     return NextResponse.json({
-      stockCash,
+      stockCash: netDeposit,
       currentStockValue,
-      buyStockValue,
-      totalValue,
-      baseValue,
+      totalDividend,
+      netDeposit,
       profitAmount,
       profitRate,
     });

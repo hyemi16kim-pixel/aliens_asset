@@ -60,15 +60,17 @@ const navWrapStyle = {
 const navStyle = {
   width: "100%",
   maxWidth: 390,
-  background: "rgba(255,255,255,0.96)",
+  background: "#FFFFFF",
   borderRadius: 24,
   padding: "12px 16px",
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
   border: `1px solid ${theme.colors.border}`,
+  backdropFilter: "none",
   boxShadow: "0 8px 22px rgba(103,91,150,0.08)",
   pointerEvents: "auto",
+  zIndex: 100,
 } as const;
 
 const addButtonStyle = {

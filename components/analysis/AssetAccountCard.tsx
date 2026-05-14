@@ -79,6 +79,10 @@ export default function AssetAccountCard({
 const [stockSummary, setStockSummary] = useState<{
   profitAmount: number;
   profitRate: number;
+  currentStockValue: number;
+  totalDividend: number;
+  netDeposit: number;
+  stockCash: number;
 } | null>(null);
 
 useEffect(() => {
@@ -90,6 +94,10 @@ useEffect(() => {
       setStockSummary({
         profitAmount: Number(data.profitAmount || 0),
         profitRate: Number(data.profitRate || 0),
+        currentStockValue: Number(data.currentStockValue || 0),
+        totalDividend: Number(data.totalDividend || 0),
+        netDeposit: Number(data.netDeposit || 0),
+        stockCash: Number(data.stockCash || 0),
       });
     })
     .catch(console.error);
@@ -213,7 +221,12 @@ const getRemainingPeriod = (date?: string | null) => {
       </div>
 
     <div style={{ marginTop: 12, fontSize: 18, fontWeight: 800 }}>
-      {account.type === "CARD"
+      {account.type === "STOCK"
+        ? money(
+            (stockSummary?.stockCash || 0) +
+              (stockSummary?.currentStockValue || 0)
+          )
+        : account.type === "CARD"
         ? money(-(account.nextPaymentAmount || 0))
         : account.type === "LOAN"
         ? money(-Math.abs(account.balance))
@@ -253,18 +266,28 @@ const getRemainingPeriod = (date?: string | null) => {
 
 {account.type === "STOCK" && (
   <>
-    <div>예수금 {money(account.stockCash || 0)}</div>
-    <div
-      style={{
-        color:
-          (stockSummary?.profitAmount || 0) >= 0 ? "#10B981" : "#E11D48",
-        fontWeight: 900,
-      }}
-    >
-      {(stockSummary?.profitAmount || 0) >= 0 ? "+" : "-"}
-      {money(Math.abs(stockSummary?.profitAmount || 0))} ·{" "}
-      {(stockSummary?.profitRate || 0).toFixed(1)}%
+    <div>
+      예수금{" "}
+      {money(
+        (stockSummary?.stockCash || 0) +
+          (stockSummary?.totalDividend || 0)
+      )}
     </div>
+    <div>주식 {money(stockSummary?.currentStockValue || 0)}</div>
+    <div
+  style={{
+    color:
+      (stockSummary?.profitAmount || 0) >= 0
+        ? "#10B981"
+        : "#E11D48",
+    fontWeight: 900,
+  }}
+>
+  총평가{" "}
+  {(stockSummary?.profitAmount || 0) >= 0 ? "+" : ""}
+  {money(stockSummary?.profitAmount || 0)} ·{" "}
+  {(stockSummary?.profitRate || 0).toFixed(1)}%
+</div>
   </>
 )}
       </div>

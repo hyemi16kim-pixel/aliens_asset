@@ -44,6 +44,7 @@ model Family {
   accounts     Account[]
   transactions Transaction[]
   goals        Goal[]
+  categories   Category[]
 }
 
 model User {
@@ -74,9 +75,10 @@ model Account {
   cardPaymentDay    Int?
   cardCycleStartDay Int?
   cardCycleEndDay   Int?
-  
+   
   stockCash Int @default(0)
-
+  sourceKey String?
+  
   stockHoldings StockHolding[]
 
   family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
@@ -149,4 +151,33 @@ model StockHolding {
 
   @@index([accountId])
   @@unique([accountId, code])
+}
+
+model Category {
+  id           Int             @id @default(autoincrement())
+  familyId     Int
+  name         String
+  type         TransactionType
+  displayOrder Int             @default(0)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@unique([familyId, name, type])
+  @@index([familyId])
+}
+
+model ImportedMessage {
+  id        Int      @id @default(autoincrement())
+  familyId  Int?
+  source    String   @default("MANUAL")
+  rawText   String
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([familyId])
 }

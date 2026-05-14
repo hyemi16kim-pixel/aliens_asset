@@ -11,50 +11,132 @@ import { Bell } from "lucide-react";
 import Link from "next/link";
 
 export default function HomePage() {
-  const [myName, setMyName] = useState("민준");
+  const [myName, setMyName] = useState("");
   const [dashboard, setDashboard] = useState<any>(null);
   const [goals, setGoals] = useState<any[]>([]);
+ const [showSplash, setShowSplash] = useState(false);
 
   useEffect(() => {
-    const savedName = localStorage.getItem("alien_my_name");
-    if (savedName) setMyName(savedName);
+    const hasShownSplash = sessionStorage.getItem("alien_splash_shown");
 
-    async function loadHomeData() {
-      try {
-        const monthStartDay = Number(
-          localStorage.getItem("alien_month_start_day") || 1
-        );
+    if (!hasShownSplash) {
+      setShowSplash(true);
 
-        const safeMonthStartDay =
-          Number.isFinite(monthStartDay) && monthStartDay >= 1 && monthStartDay <= 31
-            ? monthStartDay
-            : 1;
+      const splashTimer = setTimeout(() => {
+        sessionStorage.setItem("alien_splash_shown", "true");
+        setShowSplash(false);
+      }, 1600);
 
-        const dashboardRes = await fetch(
-          `/api/dashboard?monthStartDay=${safeMonthStartDay}`
-        );
-        const dashboardData = await dashboardRes.json();
-
-        setDashboard(dashboardData);
-      } catch (error) {
-        console.error("dashboard load error:", error);
-      }
-
-      try {
-        const goalsRes = await fetch("/api/goals");
-        const goalsData = await goalsRes.json();
-
-        setGoals(Array.isArray(goalsData) ? goalsData : []);
-      } catch (error) {
-        console.error("goals load error:", error);
-        setGoals([]);
-      }
+      return () => clearTimeout(splashTimer);
     }
 
-    loadHomeData();
-
+    setShowSplash(false);
   }, []);
 
+useEffect(() => {
+  if (showSplash) return;
+
+  const savedName = localStorage.getItem("alien_my_name");
+  if (savedName) setMyName(savedName);
+
+  async function loadHomeData() {
+    try {
+      const monthStartDay = Number(
+        localStorage.getItem("alien_month_start_day") || 1
+      );
+
+      const safeMonthStartDay =
+        Number.isFinite(monthStartDay) &&
+        monthStartDay >= 1 &&
+        monthStartDay <= 31
+          ? monthStartDay
+          : 1;
+
+      const dashboardRes = await fetch(
+        `/api/dashboard?monthStartDay=${safeMonthStartDay}`,
+        { cache: "no-store" }
+      );
+
+      const dashboardData = await dashboardRes.json();
+      setDashboard(dashboardData);
+    } catch (error) {
+      console.error("dashboard load error:", error);
+    }
+
+    try {
+      const goalsRes = await fetch("/api/goals", {
+        cache: "no-store",
+      });
+
+      const goalsData = await goalsRes.json();
+      setGoals(Array.isArray(goalsData) ? goalsData : []);
+    } catch (error) {
+      console.error("goals load error:", error);
+      setGoals([]);
+    }
+  }
+
+  loadHomeData();
+}, [showSplash]);
+
+  if (showSplash) {
+    return (
+      <main
+        style={{
+          minHeight: "100vh",
+          background: "#FFFFFF",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 14,
+          }}
+        >
+          <div
+            style={{
+              width: 88,
+              height: 88,
+              borderRadius: 28,
+              background: "#EAF8D8",
+              border: "1px solid #D7EFC1",
+              display: "grid",
+              placeItems: "center",
+              fontSize: 42,
+            }}
+          >
+            👽
+          </div>
+
+          <div
+            style={{
+              fontSize: 25,
+              fontWeight: 900,
+              color: "#1F1B2E",
+              letterSpacing: -0.8,
+            }}
+          >
+            ALIEN ASSET
+          </div>
+
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 800,
+              color: "#9B96AA",
+            }}
+          >
+            함께 모으는 우리 자산
+          </div>
+        </div>
+      </main>
+    );
+  }
   return (
     <main
       style={{
@@ -84,7 +166,7 @@ export default function HomePage() {
         >
           <div>
             <div style={{ fontSize: 16, fontWeight: 900 }}>
-              안녕하세요 {myName}님 👋
+              안녕하세요 {myName || "사용자"}님 👋
             </div>
             <div style={{ fontSize: 11, color: "#9B96AA", marginTop: 3 }}>
               함께 모으고, 함께 이루는 우리 자산

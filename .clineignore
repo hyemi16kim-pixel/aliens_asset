@@ -1,0 +1,12 @@
+node_modules
+.next
+android/build
+android/app/build
+dist
+build
+coverage
+.git
+.gradle
+*.apk
+*.log
+prisma/migrations
