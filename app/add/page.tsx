@@ -47,6 +47,7 @@ type Account = {
   name: string;
   type: string;
   balance: number;
+  aliases?: string[];
   sourceKey?: string | null;
   owner?: {
     id: number;
@@ -845,6 +846,22 @@ console.log("MATCH_DEBUG", {
 
 
 {[...new Map(importedMessages.map((item) => [item.rawText, item])).values()]
+  .filter((item) => {
+    const text = `${item.rawText} ${item.sourceKey}`.toLowerCase();
+
+    return accounts.some((account) => {
+      const aliasMatch =
+        account.aliases?.some((alias: string) =>
+          text.includes(alias.toLowerCase())
+        ) ?? false;
+
+      const sourceMatch =
+        account.sourceKey &&
+        text.includes(String(account.sourceKey).toLowerCase());
+
+      return aliasMatch || sourceMatch;
+    });
+  })
   .filter((item) => !usedImportIds.includes(String(item.id)))
   .sort(
     (a, b) =>
