@@ -196,10 +196,12 @@ const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 const parseImportedMessage = (item: ImportedMessage) => {
   const text = item.rawText || "";
 
-  const amountMatch =
-    text.match(/(?:입금|출금|승인|결제|사용|자동결제)\s*(\d{1,3}(?:,\d{3})+|\d+)/) ||
-    text.match(/(\d{1,3}(?:,\d{3})+|\d+)\s*원/);
+  const cleanText = text.replace(/누적\s*\d{1,3}(?:,\d{3})*\s*원/g, "");
 
+  const amountMatch =
+    cleanText.match(/(?:입금|출금|승인|결제|사용|자동결제)\s*(\d{1,3}(?:,\d{3})+|\d+)\s*원?/) ||
+    cleanText.match(/(\d{1,3}(?:,\d{3})+|\d+)\s*원/);
+    
   const amount = amountMatch
     ? Number(amountMatch[1].replace(/,/g, ""))
     : 0;
