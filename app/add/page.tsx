@@ -145,7 +145,17 @@ export default function AddTransactionPage() {
 
   const [usedImportIds, setUsedImportIds] = useState<string[]>([]);
   const [selectedImportId, setSelectedImportId] = useState<string>("");
+  const [hiddenImportIds, setHiddenImportIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
 
+    try {
+      return JSON.parse(
+        localStorage.getItem("alien_hidden_import_ids") || "[]"
+      );
+    } catch {
+      return [];
+    }
+  });
 
   const [stockTradeType, setStockTradeType] = useState<"BUY" | "SELL">("BUY");
   const [stockAccountId, setStockAccountId] = useState("");
@@ -862,7 +872,11 @@ console.log("MATCH_DEBUG", {
       return aliasMatch || sourceMatch;
     });
   })
-  .filter((item) => !usedImportIds.includes(String(item.id)))
+  .filter(
+    (item) =>
+      !usedImportIds.includes(String(item.id)) &&
+      !hiddenImportIds.includes(String(item.id))
+  )
   .sort(
     (a, b) =>
       new Date(b.receivedAt).getTime() -
@@ -875,13 +889,39 @@ console.log("MATCH_DEBUG", {
     <div
       key={item.id}
       style={{
-        ...importCardStyle,
-        opacity: usedImportIds.includes(item.id) ? 0.45 : 1,
-        filter: usedImportIds.includes(item.id)
-          ? "grayscale(1)"
-          : "none",
-      }}
+      ...importCardStyle,
+      position: "relative",
+      opacity: usedImportIds.includes(item.id) ? 0.45 : 1,
+      filter: usedImportIds.includes(item.id)
+        ? "grayscale(1)"
+        : "none",
+    }}
     >
+      <button
+  type="button"
+  onClick={() => {
+    const next = [...hiddenImportIds, String(item.id)];
+
+    setHiddenImportIds(next);
+
+    localStorage.setItem(
+      "alien_hidden_import_ids",
+      JSON.stringify(next)
+    );
+  }}
+  style={{
+    position: "absolute",
+    top: 10,
+    right: 10,
+    border: "none",
+    background: "transparent",
+    fontSize: 16,
+    cursor: "pointer",
+    color: theme.colors.subtext,
+  }}
+>
+  ×
+</button>
       <div style={{ fontSize: 12, color: theme.colors.subtext }}>
         {item.sourceType} · {item.sourceKey}
       </div>
