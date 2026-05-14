@@ -193,32 +193,27 @@ const [importedMessages, setImportedMessages] = useState<ImportedMessage[]>([]);
 const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
 
-const parseImportedMessage = (message: ImportedMessage) => {
-  const raw = message.rawText;
+const parseImportedMessage = (item: ImportedMessage) => {
+  const text = item.rawText || "";
 
-  const amountMatch = raw.match(/(입금|출금|승인|결제)\s?([\d,]+)원?/);
-  const dateMatch = raw.match(/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/);
-  const accountMatch = raw.match(/<([^>]+)>/);
+  const amountMatch =
+    text.match(/(?:입금|출금|승인|결제|사용|자동결제)\s*(\d{1,3}(?:,\d{3})+|\d+)/) ||
+    text.match(/(\d{1,3}(?:,\d{3})+|\d+)\s*원/);
 
-  const action = amountMatch?.[1] || "";
-  const amount = Number((amountMatch?.[2] || "0").replace(/,/g, ""));
-  const accountNameHint = accountMatch?.[1] || "";
+  const amount = amountMatch
+    ? Number(amountMatch[1].replace(/,/g, ""))
+    : 0;
 
-  const currentYear = new Date().getFullYear();
-  const date = dateMatch
-    ? `${currentYear}-${dateMatch[1]}-${dateMatch[2]}`
-    : new Date().toISOString().slice(0, 10);
-
-  const parsedType =
-    action === "입금" ? "INCOME" : "EXPENSE";
+  const type: TransactionType =
+    /입금/.test(text) ? "INCOME" : "EXPENSE";
 
   return {
-    type: parsedType as TransactionType,
+    type,
     amount,
-    category: parsedType === "INCOME" ? "수입" : "식비",
-    memo: raw.split("\n").find((line) => line.includes(action)) || raw,
-    date,
-    accountNameHint,
+    category: type === "INCOME" ? "수입" : "기타",
+    date: new Date().toISOString().slice(0, 10),
+    accountNameHint: item.sourceKey || "",
+    memo: text.replace(/\s+/g, " ").slice(0, 40),
   };
 };
 
