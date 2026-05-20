@@ -60,7 +60,11 @@ export async function PATCH(
             ? body.monthlyPayment
             : before.monthlyPayment,
         balance:
-          body.balance !== undefined ? Number(body.balance) : before.balance,
+          body.balance !== undefined
+            ? (["LOAN", "CARD"].includes(body.type ?? before.type)
+                ? Math.abs(Number(body.balance))
+                : Number(body.balance))
+            : before.balance,
         color: body.color ?? before.color,
       },
     });
@@ -76,20 +80,27 @@ export async function PATCH(
         : null;
 
         if (diff !== 0) {
-        await prisma.transaction.create({
+          // 대출·카드는 부채 계좌: 잔액 증가 = 빚 늘어남(지출), 잔액 감소 = 빚 줄어듦(수입)
+          // 일반 계좌: 잔액 증가 = 수입, 잔액 감소 = 지출
+          const isDebt = ["LOAN", "CARD"].includes(before.type);
+          const txType = isDebt
+            ? (diff > 0 ? "EXPENSE" : "INCOME")
+            : (diff > 0 ? "INCOME" : "EXPENSE");
+
+          await prisma.transaction.create({
             data: {
-            familyId: 1,
-            userId: updated.ownerId || null,
-            owner: body.ownerName || accountOwner?.name || "미지정",
-            type: diff > 0 ? "INCOME" : "EXPENSE",
-            amount: Math.abs(diff),
-            category: "자산 수정",
-            memo: `${updated.name} 자산 수정`,
-            transactionAt: new Date(),
-            fromAccountId: diff < 0 ? id : null,
-            toAccountId: diff > 0 ? id : null,
+              familyId: before.familyId,
+              userId: updated.ownerId || null,
+              owner: body.ownerName || accountOwner?.name || "미지정",
+              type: txType,
+              amount: Math.abs(diff),
+              category: "자산 수정",
+              memo: `${updated.name} 자산 수정`,
+              transactionAt: new Date(),
+              fromAccountId: txType === "EXPENSE" ? id : null,
+              toAccountId: txType === "INCOME" ? id : null,
             },
-        });
+          });
         }
 
     return NextResponse.json(updated);

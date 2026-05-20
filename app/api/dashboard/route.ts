@@ -52,6 +52,11 @@ export async function GET(req: NextRequest) {
       req.nextUrl.searchParams.get("monthStartDay") || 1
     );
 
+    const familyIdParam = req.nextUrl.searchParams.get("familyId");
+    const familyId = familyIdParam ? Number(familyIdParam) : undefined;
+
+    const familyWhere = familyId ? { familyId } : {};
+
     const monthStartDay = Math.min(
       Math.max(Number.isFinite(monthStartDayParam) ? monthStartDayParam : 1, 1),
       31
@@ -67,108 +72,111 @@ export async function GET(req: NextRequest) {
     );
     const previousRange = getCustomMonthRange(previousBaseMonth, monthStartDay);
 
-    const [accounts, recentTransactions, summaryTransactions, previousTransactions] =
-      await Promise.all([
-        prisma.account.findMany({
-          where: { familyId: 1 },
-          include: {
-            stockHoldings: true,
-          },
-        }),
+    const [
+      accounts,
+      goals,
+      recentTransactions,
+      summaryTransactions,
+      previousTransactions,
+    ] = await Promise.all([
+      prisma.account.findMany({
+        where: familyWhere,
+        include: {
+          stockHoldings: true,
+        },
+      }),
 
-        prisma.transaction.findMany({
-          where: { familyId: 1 },
-          include: {
-            fromAccount: {
-              select: { id: true, name: true, type: true },
-            },
-            toAccount: {
-              select: { id: true, name: true, type: true },
-            },
-          },
-          orderBy: {
-            transactionAt: "desc",
-          },
-          take: 20,
-        }),
+      prisma.goal.findMany({
+        where: familyWhere,
+        orderBy: { id: "asc" },
+      }),
 
-        prisma.transaction.findMany({
-          where: {
-            familyId: 1,
-            type: {
-              in: ["INCOME", "EXPENSE"],
-            },
-            transactionAt: {
-              gte: currentRange.start,
-              lte: currentRange.end,
-            },
+      prisma.transaction.findMany({
+        where: familyWhere,
+        include: {
+          fromAccount: {
+            select: { id: true, name: true, type: true },
           },
-          select: {
-            type: true,
-            amount: true,
-            category: true,
+          toAccount: {
+            select: { id: true, name: true, type: true },
           },
-        }),
+        },
+        orderBy: {
+          transactionAt: "desc",
+        },
+        take: 20,
+      }),
 
-        prisma.transaction.findMany({
-          where: {
-            familyId: 1,
-            type: {
-              in: ["INCOME", "EXPENSE"],
-            },
-            transactionAt: {
-              gte: previousRange.start,
-              lte: previousRange.end,
-            },
+      prisma.transaction.findMany({
+        where: {
+          ...familyWhere,
+          type: {
+            in: ["INCOME", "EXPENSE"],
           },
-          select: {
-            type: true,
-            amount: true,
+          transactionAt: {
+            gte: currentRange.start,
+            lte: currentRange.end,
           },
-        }),
-      ]);
+        },
+        select: {
+          type: true,
+          amount: true,
+        },
+      }),
 
-const totalAsset = accounts.reduce((sum: number, account: any) => {
-  if (account.type === "STOCK") {
-    const stockValue = (account.stockHoldings || []).reduce(
-      (stockSum: number, holding: any) =>
-        stockSum + Number(holding.quantity || 0) * Number(holding.avgPrice || 0),
-      0
-    );
+      prisma.transaction.findMany({
+        where: {
+          ...familyWhere,
+          type: {
+            in: ["INCOME", "EXPENSE"],
+          },
+          transactionAt: {
+            gte: previousRange.start,
+            lte: previousRange.end,
+          },
+        },
+        select: {
+          type: true,
+          amount: true,
+        },
+      }),
+    ]);
 
-    return sum + Number(account.stockCash || 0) + stockValue;
-  }
+    const totalAsset = accounts.reduce((sum: number, account: any) => {
+      if (account.type === "STOCK") {
+        const stockValue = (account.stockHoldings || []).reduce(
+          (stockSum: number, holding: any) =>
+            stockSum +
+            Number(holding.quantity || 0) * Number(holding.avgPrice || 0),
+          0
+        );
 
-  return sum + Number(account.balance || 0);
-}, 0);
+        return sum + Number(account.stockCash || 0) + stockValue;
+      }
 
-   const debtAmount = accounts
-  .filter((account: any) => account.type === "LOAN" || account.type === "CARD")
-  .reduce(
-    (sum: number, account: any) =>
-      sum + Math.abs(Number(account.balance || 0)),
-    0
-  );
+      return sum + Number(account.balance || 0);
+    }, 0);
+
+    const debtAmount = accounts
+      .filter(
+        (account: any) => account.type === "LOAN" || account.type === "CARD"
+      )
+      .reduce(
+        (sum: number, account: any) =>
+          sum + Math.abs(Number(account.balance || 0)),
+        0
+      );
 
     let totalIncome = 0;
     let totalExpense = 0;
     let previousIncome = 0;
     let previousExpense = 0;
 
-    const categoryMap: Record<string, number> = {};
-
     summaryTransactions.forEach((tx: any) => {
       const amount = Number(tx.amount || 0);
 
-      if (tx.type === "INCOME") {
-        totalIncome += amount;
-      }
-
-      if (tx.type === "EXPENSE") {
-        totalExpense += amount;
-        categoryMap[tx.category || "기타"] =
-          (categoryMap[tx.category || "기타"] || 0) + amount;
-      }
+      if (tx.type === "INCOME") totalIncome += amount;
+      if (tx.type === "EXPENSE") totalExpense += amount;
     });
 
     previousTransactions.forEach((tx: any) => {
@@ -178,31 +186,44 @@ const totalAsset = accounts.reduce((sum: number, account: any) => {
       if (tx.type === "EXPENSE") previousExpense += amount;
     });
 
-    const spendingCategories = Object.entries(categoryMap)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4)
-      .map(([category, amount]) => ({
-        category,
-        amount,
-      }));
+    const targetAmount = goals.reduce(
+      (sum: number, goal: any) => sum + Number(goal.targetAmount || 0),
+      0
+    );
+
+    const currentGoalAmount = goals.reduce(
+      (sum: number, goal: any) => sum + Number(goal.currentAmount || 0),
+      0
+    );
 
     return NextResponse.json({
       totalAsset,
       debtAmount,
+
       totalIncome,
       totalExpense,
+      monthlyIncome: totalIncome,
+      monthlyExpense: totalExpense,
+      monthlyNet: totalIncome - totalExpense,
+
       incomeDiff: totalIncome - previousIncome,
       expenseDiff: totalExpense - previousExpense,
+
+      targetAmount,
+      currentGoalAmount,
+      goalCount: goals.length,
+
       recentTransactions,
-      spendingCategories,
       accounts,
       monthRange: {
         start: currentRange.start.toISOString(),
         end: currentRange.end.toISOString(),
       },
     });
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "대시보드 조회 실패" }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: "대시보드 조회 실패", detail: error.message },
+      { status: 500 }
+    );
   }
 }

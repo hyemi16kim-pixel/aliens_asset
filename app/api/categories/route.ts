@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
       name,
       type,
       displayOrder = 0,
+      icon = "👽",
     } = body;
 
     if (!name || !type) {
@@ -71,7 +72,23 @@ export async function POST(req: NextRequest) {
         name,
         type,
         displayOrder,
+        icon,
       },
+    }).catch((error) => {
+      // icon 필드가 없는 경우를 대비한 폴백
+      console.error("카테고리 생성 오류:", error);
+      if (error.code === "P1047") {
+        // Prisma 마이그레이션 미적용 시 icon 없이 재시도
+        return prisma.category.create({
+          data: {
+            familyId,
+            name,
+            type,
+            displayOrder,
+          },
+        });
+      }
+      throw error;
     });
 
     return NextResponse.json(category);

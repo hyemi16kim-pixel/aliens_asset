@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import BottomNav from "@/components/navigation/BottomNav";
 import SpendingCategoryCard from "@/components/dashboard/SpendingCategoryCard";
 import { ChevronLeft } from "lucide-react";
 import { theme } from "@/components/lib/theme";
+import { getCurrentFamilyId, getCurrentFamilyCode } from "@/components/lib/familyCode";
 import AssetAccountGrid from "@/components/analysis/AssetAccountGrid";
 import StockHoldingList from "@/components/analysis/StockHoldingList";
 
@@ -16,6 +18,7 @@ import {
   getSavedMonthStartDay,
   isDateInRange,
 } from "@/components/lib/monthRange";
+import { useSwipeNav } from "@/components/lib/useSwipeNav";
 
 import {
   Gamepad2,
@@ -162,12 +165,32 @@ type Account = {
   owner?: {
     id: number;
     name: string;
+    role?: string;
   } | null;
 };
 
 export default function AnalysisPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [tab, setTab] = useState<"ASSET" | "SPENDING" | "TREND">("ASSET");
+  const [tab, setTab] = useState<"ASSET" | "SPENDING" | "TREND">(
+    (searchParams.get("tab") as "ASSET" | "SPENDING" | "TREND") || "ASSET"
+  );
+  // 탭 순서: ASSET → SPENDING → TREND
+  const TAB_ORDER = ["ASSET", "SPENDING", "TREND"] as const;
+  const pageSwipe = useSwipeNav({
+    onSwipeLeft: () => {
+      const idx = TAB_ORDER.indexOf(tab);
+      if (idx < TAB_ORDER.length - 1) setTab(TAB_ORDER[idx + 1]);
+      else router.push("/goals");
+    },
+    onSwipeRight: () => {
+      const idx = TAB_ORDER.indexOf(tab);
+      if (idx > 0) setTab(TAB_ORDER[idx - 1]);
+      else router.push("/transactions");
+    },
+  });
+
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedPaletteAccount, setSelectedPaletteAccount] = useState<number | null>(null);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
@@ -204,9 +227,10 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
 } | null>(null);
 
   const [accountColor, setAccountColor] = useState("#F6F0FF");
+  const [assetOwnerFilter, setAssetOwnerFilter] = useState("전체");
   const fetchAccounts = async () => {
     try {
-      const res = await fetch("/api/accounts");
+      const res = await fetch(`/api/accounts?familyId=${getCurrentFamilyId()}`);
       const data = await res.json();
       const accountList = Array.isArray(data) ? data : data.accounts || [];
 
@@ -224,7 +248,7 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
   };
   
   useEffect(() => {
-    fetch("/api/transactions")
+    fetch(`/api/transactions?familyId=${getCurrentFamilyId()}`)
       .then((res) => res.json())
       .then((data) => setTransactions(data || []))
       .catch(console.error);
@@ -232,7 +256,7 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
     setMonthStartDay(savedStartDay);
     setTrendMonth(getBaseMonthByStartDay(new Date(), savedStartDay));
 
-     fetch("/api/profile")
+     fetch(`/api/profile?code=${encodeURIComponent(getCurrentFamilyCode())}`)
       .then((res) => res.json())
       .then((data) => {
         const savedMyName = localStorage.getItem("alien_my_name") || "나";
@@ -293,9 +317,9 @@ const getPercent = (owner: string) => {
 };
 
   return (
-    <main style={pageStyle}>
+    <main {...pageSwipe} style={pageStyle}>
       <div style={containerStyle}>
-        <h1 style={{ fontSize: 22, fontWeight: 900 }}>분석</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 900, color: "#2D2545", letterSpacing: -0.5, margin: 0, padding: "8px 2px 2px" }}>분석 🔭</h1>
 
         <div style={tabStyle}>
           <button onClick={() => setTab("ASSET")} style={tabButtonStyle}>
@@ -532,8 +556,7 @@ const getPercent = (owner: string) => {
         {tab === "ASSET" && (
           <>
 <div style={assetHeaderStyle}>
-  <strong style={{ fontSize: 15 }}>자산 목록</strong>
-
+  <strong style={{ fontSize: 15, fontWeight: 900, color: "#2D2545" }}>자산 목록</strong>
   <button
     onClick={() => {
       setEditingAccount(null);
@@ -548,12 +571,39 @@ const getPercent = (owner: string) => {
     }}
     style={addAssetSmallButtonStyle}
   >
-    + List 추가
+    + 추가
   </button>
 </div>
 
+{/* 소유주 필터 */}
+<div style={{ display: "flex", gap: 6 }}>
+  {(["전체", users[0]?.name || "나", users[1]?.name || "파트너", "공동"] as const).map((f) => {
+    const active = assetOwnerFilter === f;
+    return (
+      <button key={f} type="button" onClick={() => setAssetOwnerFilter(f)} style={{
+        height: 30, padding: "0 12px", borderRadius: 999,
+        fontSize: 11, fontWeight: 800, cursor: "pointer",
+        border: active ? `1.5px solid ${theme.colors.primary}` : "1.5px solid #E8E1F5",
+        background: active ? `${theme.colors.primary}18` : "rgba(255,255,255,0.8)",
+        color: active ? theme.colors.primary : "#B0A8C8",
+        transition: "all 0.18s",
+      }}>{f}</button>
+    );
+  })}
+</div>
+
             <AssetAccountGrid
-              accounts={accounts}
+              accounts={(() => {
+                const myName = users[0]?.name || "나";
+                const partnerName = users[1]?.name || "파트너";
+                if (assetOwnerFilter === myName)
+                  return accounts.filter((a) => a.owner?.name === myName || a.owner?.role === "OWNER");
+                if (assetOwnerFilter === partnerName)
+                  return accounts.filter((a) => a.owner?.name === partnerName || a.owner?.role === "MEMBER");
+                if (assetOwnerFilter === "공동")
+                  return accounts.filter((a) => !a.owner || a.owner?.name === "공동");
+                return accounts; // 전체
+              })()}
               onSelectStockAccount={(account) => {
                 setSelectedStockAccount(account);
               }}
@@ -564,9 +614,9 @@ const getPercent = (owner: string) => {
                 setCardCycleEndDay(account.cardCycleEndDay ? String(account.cardCycleEndDay) : "");
                 setAccountName(account.name);
                 setAccountSourceKey(account.sourceKey || "");
-
                 setAccountType(account.type);
                 setAccountBalance(String(account.balance));
+                setAccountColor(account.color || "#F6F0FF");
                 setAccountOwnerId(account.ownerId ? String(account.ownerId) : "");
                 setShowAccountModal(true);
                 setNextPaymentDate(account.nextPaymentDate || "");
@@ -828,6 +878,10 @@ const lastMonthExpenses = expenses.filter((tx) =>
 {showAccountModal && (
   <div style={modalOverlayStyle}>
     <div style={modalStyle}>
+    {/* 핸들 */}
+    <div style={{ display: "flex", justifyContent: "center", paddingTop: 14, paddingBottom: 2 }}>
+      <div style={{ width: 40, height: 4, borderRadius: 2, background: "#E0D9F5" }} />
+    </div>
     <div style={modalHeaderStyle}>
   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
     <button
@@ -1055,7 +1109,7 @@ const lastMonthExpenses = expenses.filter((tx) =>
         type: accountType,
         balance: Number(accountBalance || 0),
         color: accountColor,
-        familyId: 1,
+        familyId: getCurrentFamilyId(),
        ownerId:
           accountOwnerId && accountOwnerId !== "0"
             ? Number(accountOwnerId)
@@ -1120,7 +1174,10 @@ const lastMonthExpenses = expenses.filter((tx) =>
 {selectedPaletteAccount && (
   <div style={modalOverlayStyle}>
     <div style={modalStyle}>
-      <strong>카드 색상 선택</strong>
+    <div style={{ display: "flex", justifyContent: "center", paddingTop: 14, paddingBottom: 2 }}>
+      <div style={{ width: 40, height: 4, borderRadius: 2, background: "#E0D9F5" }} />
+    </div>
+      <strong style={{ fontSize: 16, fontWeight: 900, color: "#2D2545", paddingTop: 4 }}>카드 색상 선택</strong>
 
       <div style={{ display: "flex", gap: 12, marginTop: 14 }}>
         {[
@@ -1176,12 +1233,13 @@ const tabButtonStyle = {
   color: theme.colors.subtext,
   fontSize: 13,
   padding: 0,
+  cursor: "pointer",
 } as const;
 
 const pageStyle = {
   minHeight: "100vh",
-  background: "#FFFFFF",
-  padding: "14px 12px 82px",
+  background: "linear-gradient(160deg, #A78BFA28 0%, #A78BFA10 30%, #f8f6ff 65%, #ffffff 100%)",
+  padding: "0 0 90px",
   display: "flex",
   justifyContent: "center",
 } as const;
@@ -1192,34 +1250,41 @@ const containerStyle = {
   display: "flex",
   flexDirection: "column",
   gap: 14,
+  padding: "16px 16px 0",
 } as const;
 
 const tabStyle = {
-  height: 42,
-  borderRadius: 18,
-  border: `1px solid ${theme.colors.border}`,
+  height: 46,
+  borderRadius: 999,
+  background: "white",
+  border: "1.5px solid #EDE6F9",
   display: "grid",
   gridTemplateColumns: "1fr 1fr 1fr",
   alignItems: "center",
   textAlign: "center",
   fontSize: 13,
   color: theme.colors.subtext,
+  padding: 4,
+  boxShadow: "0 4px 14px rgba(167,139,250,0.10)",
 } as const;
 
 const activeTabStyle = {
-  background: theme.colors.primary,
+  background: "linear-gradient(135deg, #7C5CFF 0%, #A78BFA 100%)",
   color: "white",
-  height: 34,
-  borderRadius: 16,
+  height: 36,
+  borderRadius: 999,
   display: "grid",
   placeItems: "center",
+  fontWeight: 900,
+  boxShadow: "0 4px 12px rgba(124,92,255,0.30)",
 } as const;
 
 const cardStyle = {
   background: "white",
-  borderRadius: 22,
-  padding: "16px",
-  border: `1px solid ${theme.colors.border}`,
+  borderRadius: 24,
+  padding: "18px 18px 16px",
+  border: "1px solid #EDE6F9",
+  boxShadow: "0 6px 24px rgba(167,139,250,0.10)",
 } as const;
 
 const chartStyle = {
@@ -1233,48 +1298,61 @@ const chartStyle = {
 const modalOverlayStyle = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.28)",
+  background: "rgba(45,37,69,0.35)",
   display: "flex",
-  alignItems: "end",
+  alignItems: "flex-end",
   justifyContent: "center",
-  zIndex: 50,
+  zIndex: 1000,
+  backdropFilter: "blur(2px)",
 } as const;
 
 const modalStyle = {
   width: "100%",
   maxWidth: 390,
+  maxHeight: "90vh",
+  overflowY: "auto" as const,
   background: "white",
-  borderRadius: "26px 26px 0 0",
-  padding: "22px 18px 28px",
+  borderRadius: "28px 28px 0 0",
+  padding: "0 20px 40px",
   display: "flex",
-  flexDirection: "column",
+  flexDirection: "column" as const,
   gap: 12,
+  boxShadow: "0 -8px 40px rgba(124,92,255,0.15)",
 } as const;
 
 const inputStyle = {
-  height: 44,
-  borderRadius: 14,
-  border: `1px solid ${theme.colors.border}`,
-  padding: "0 12px",
+  height: 48,
+  borderRadius: 16,
+  border: "1.5px solid #EDE6F9",
+  padding: "0 14px",
   fontSize: 14,
+  fontWeight: 700,
+  color: "#2D2545",
+  background: "#FAFAFF",
+  outline: "none",
+  width: "100%",
+  boxSizing: "border-box" as const,
 } as const;
 
 const saveButtonStyle = {
-  height: 46,
+  height: 52,
   border: "none",
-  borderRadius: 16,
-  background: theme.colors.primary,
+  borderRadius: 18,
+  background: "linear-gradient(135deg, #7C5CFF 0%, #A78BFA 100%)",
   color: "white",
-  fontWeight: 800,
-  fontSize: 14,
+  fontWeight: 900,
+  fontSize: 15,
+  cursor: "pointer",
+  boxShadow: "0 6px 20px rgba(124,92,255,0.30)",
 } as const;
 
 const cancelButtonStyle = {
-  height: 42,
+  height: 44,
   border: "none",
   background: "transparent",
-  color: theme.colors.subtext,
+  color: "#B0A8C8",
   fontWeight: 700,
+  cursor: "pointer",
 } as const;
 
 const monthStyle = {
@@ -1319,15 +1397,16 @@ const assetHeaderStyle = {
 } as const;
 
 const addAssetSmallButtonStyle = {
-  height: 32,
+  height: 34,
   border: "none",
   borderRadius: 999,
-  background: theme.colors.primary,
+  background: "linear-gradient(135deg, #7C5CFF 0%, #A78BFA 100%)",
   color: "white",
-  padding: "0 14px",
+  padding: "0 16px",
   fontSize: 12,
-  fontWeight: 800,
+  fontWeight: 900,
   cursor: "pointer",
+  boxShadow: "0 4px 12px rgba(124,92,255,0.25)",
 } as const;
 
 const labelStyle = {
@@ -1339,8 +1418,8 @@ const labelStyle = {
 } as const;
 
 const cardSettingBoxStyle = {
-  background: "#F8F4FF",
-  border: `1px solid ${theme.colors.border}`,
+  background: "linear-gradient(160deg, #F4EFFE 0%, #EDE6FC 100%)",
+  border: "1.5px solid #DDD6FE",
   borderRadius: 18,
   padding: 14,
   display: "flex",
@@ -1436,11 +1515,11 @@ const accountTypeButtonStyle = {
 } as const;
 
 const deleteButtonStyle = {
-  height: 44,
+  height: 48,
   border: "none",
   borderRadius: 16,
-  background: "#FFE4E6",
-  color: "#E11D48",
+  background: "#FFF3F6",
+  color: "#FF3B70",
   fontWeight: 900,
   fontSize: 14,
   cursor: "pointer",
@@ -1486,12 +1565,13 @@ const categoryRowStyle = {
 
 const monthSummaryBoxStyle = {
   marginTop: 12,
-  borderRadius: 16,
-  background: "#F8F4FF",
-  padding: "12px 14px",
+  borderRadius: 18,
+  background: "linear-gradient(160deg, #F4EFFE 0%, #EDE6FC 100%)",
+  border: "1px solid #DDD6FE",
+  padding: "14px 16px",
   display: "flex",
   flexDirection: "column",
-  gap: 6,
+  gap: 8,
   fontSize: 12,
   color: theme.colors.text,
 } as const;
@@ -1568,18 +1648,20 @@ const dualBarStyle = {
 
 const netAssetBoxStyle = {
   marginTop: 14,
-  borderRadius: 18,
-  background: "#F8F4FF",
-  padding: "16px",
+  borderRadius: 20,
+  background: "linear-gradient(160deg, #F4EFFE 0%, #EDE6FC 100%)",
+  border: "1.5px solid #DDD6FE",
+  padding: "18px",
   display: "flex",
   flexDirection: "column",
   gap: 6,
 } as const;
 
 const netAssetTextStyle = {
-  fontSize: 24,
-  fontWeight: 950,
-  color: theme.colors.primary,
+  fontSize: 26,
+  fontWeight: 900,
+  color: "#7C5CFF",
+  letterSpacing: "-0.5px",
 } as const;
 
 const trendText = {
@@ -1626,14 +1708,15 @@ const emptyTrendTextStyle = {
 const assetTrendBoxStyle = {
   marginTop: 10,
   borderRadius: 16,
-  background: "#FFFFFF",
-  border: `1px solid ${theme.colors.border}`,
-  padding: "12px 14px",
+  background: "#FAFAFF",
+  border: "1px solid #EDE6F9",
+  padding: "12px 16px",
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
   fontSize: 12,
   fontWeight: 800,
+  color: "#6B6080",
 } as const;
 
 const donutColors = ["#9B7CFF", "#F59AC8", "#7CCBFF", "#7BE3B1", "#FFD66B"];
@@ -1693,20 +1776,21 @@ const monthNavButtonStyle = {
   width: 34,
   height: 34,
   borderRadius: 12,
-  border: `1px solid ${theme.colors.border}`,
-  background: "#FFFFFF",
+  border: "1px solid #EDE6F9",
+  background: "#FAFAFF",
   display: "grid",
   placeItems: "center",
   cursor: "pointer",
 } as const;
 
 const monthLabelStyle = {
-  padding: "6px 14px",
+  padding: "6px 16px",
   borderRadius: 999,
-  background: theme.colors.primarySoft,
-  color: theme.colors.primary,
+  background: "linear-gradient(135deg, #F4EFFE 0%, #EDE6FC 100%)",
+  color: "#7C5CFF",
   fontSize: 12,
   fontWeight: 900,
+  border: "1px solid #DDD6FE",
 } as const;
 
 const trendMonthHeaderStyle = {
@@ -1725,8 +1809,8 @@ const trendToggleStyle = {
 } as const;
 
 const trendToggleButtonStyle = {
-  height: 34,
-  border: `1px solid ${theme.colors.border}`,
+  height: 36,
+  border: "1.5px solid #EDE6F9",
   borderRadius: 999,
   fontSize: 12,
   fontWeight: 900,

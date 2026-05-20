@@ -1,16 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSwipeNav } from "@/components/lib/useSwipeNav";
 import HeaderCard from "@/components/dashboard/HeaderCard";
 import IncomeExpenseCards from "@/components/dashboard/IncomeExpenseCards";
 import GoalCard from "@/components/dashboard/GoalCard";
 import RecentTransactions from "@/components/dashboard/RecentTransactions";
-import SpendingCategoryCard from "@/components/dashboard/SpendingCategoryCard";
 import BottomNav from "@/components/navigation/BottomNav";
 import { Bell } from "lucide-react";
 import Link from "next/link";
 
 export default function HomePage() {
+  const router = useRouter();
+  const swipe = useSwipeNav({
+    onSwipeLeft: () => router.push("/transactions"),
+  });
   const [myName, setMyName] = useState("");
   const [dashboard, setDashboard] = useState<any>(null);
   const [goals, setGoals] = useState<any[]>([]);
@@ -64,7 +69,7 @@ useEffect(() => {
     }
 
     try {
-      const goalsRes = await fetch("/api/goals", {
+      const goalsRes = await fetch(`/api/goals?t=${Date.now()}`, {
         cache: "no-store",
       });
 
@@ -139,6 +144,7 @@ useEffect(() => {
   }
   return (
     <main
+      {...swipe}
       style={{
         minHeight: "100vh",
         background: "#FFFFFF",
@@ -195,10 +201,10 @@ useEffect(() => {
         </header>
 
         <HeaderCard data={dashboard} />
+        
         <IncomeExpenseCards data={dashboard} />
         <GoalCard goals={goals} />
         <RecentTransactions items={dashboard?.recentTransactions || []} />
-        <SpendingCategoryCard items={dashboard?.spendingCategories || []} />
         <BottomNav />
       </div>
     </main>

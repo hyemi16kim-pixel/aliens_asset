@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSwipeNav } from "@/components/lib/useSwipeNav";
 import BottomNav from "@/components/navigation/BottomNav";
 import { theme } from "@/components/lib/theme";
+import { getCurrentFamilyId } from "@/components/lib/familyCode";
 import { ChevronLeft, Plus, X, Trash2 } from "lucide-react";
 
 type Goal = {
@@ -30,8 +33,13 @@ export default function GoalsPage() {
   const [currentAmount, setCurrentAmount] = useState("");
   const [targetAmount, setTargetAmount] = useState("");
 
+  const router = useRouter();
+  const pageSwipe = useSwipeNav({
+    onSwipeRight: () => router.push("/analysis?tab=TREND"),
+  });
+
   const loadGoals = async () => {
-    const res = await fetch("/api/goals");
+    const res = await fetch(`/api/goals?familyId=${getCurrentFamilyId()}`);
     const data = await res.json();
     setGoals(data || []);
   };
@@ -104,7 +112,7 @@ export default function GoalsPage() {
           dueDate: periodType === "LIMITED" ? dueDate : null,
         }
       : {
-          familyId: 1,
+          familyId: getCurrentFamilyId(),
           userId: 1,
           title,
           icon,
@@ -155,7 +163,7 @@ export default function GoalsPage() {
   const money = (v: number) => `₩${Number(v || 0).toLocaleString()}`;
 
   return (
-    <main style={pageStyle}>
+    <main {...pageSwipe} style={pageStyle}>
       <div style={containerStyle}>
         <header style={headerStyle}>
           <ChevronLeft size={22} />

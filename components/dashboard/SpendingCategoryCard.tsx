@@ -1,5 +1,6 @@
 "use client";
 
+import { theme } from "@/components/lib/theme";
 
 type CategoryItem = {
   category: string;
@@ -12,7 +13,7 @@ export default function SpendingCategoryCard({
   items?: CategoryItem[];
 }) {
 
-  const colors = ["#8F7CFF", "#F8C8DC", "#B8F3D9", "#F7E3A1"];
+  const colors = [theme.colors.primary, theme.colors.pinkDark, theme.colors.mintDark, theme.colors.yellowDark];
   const total = items.reduce((sum, item) => sum + item.amount, 0);
 
   const getPercent = (amount: number) => {
@@ -37,47 +38,52 @@ export default function SpendingCategoryCard({
   return (
     <section
       style={{
-        background: "white",
-        borderRadius: 22,
-        padding: "16px",
-        border: "1px solid #E9E3F7",
+        background: theme.colors.card,
+        borderRadius: 24,
+        padding: "20px",
+        border: `1px solid ${theme.colors.border}`,
+        boxShadow: theme.shadow.sm,
       }}
     >
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
-          marginBottom: 12,
+          alignItems: "center",
+          marginBottom: 16,
         }}
       >
-        <strong style={{ fontSize: 14 }}>소비 카테고리 TOP 4</strong>
-        <span style={{ fontSize: 11, color: "#9B96AA" }}>이번 달</span>
+        <strong style={{ fontSize: 15, fontWeight: 800, color: theme.colors.text }}>소비 카테고리 TOP 4</strong>
+        <span style={{ fontSize: 11, color: theme.colors.subtext, fontWeight: 600 }}>이번 달</span>
       </div>
 
-      <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
         <div
           style={{
-            width: 82,
-            height: 82,
+            width: 96,
+            height: 96,
             borderRadius: "50%",
             background: gradient,
             display: "grid",
             placeItems: "center",
+            boxShadow: `0 8px 20px ${items.length === 0 ? "rgba(156, 140, 255, 0.15)" : "rgba(156, 140, 255, 0.25)"}`,
+            position: "relative",
           }}
         >
           <div
             style={{
-              width: 38,
-              height: 38,
+              width: 44,
+              height: 44,
               borderRadius: "50%",
-              background: "white",
+              background: theme.colors.card,
+              boxShadow: `inset 0 2px 4px rgba(0, 0, 0, 0.05)`,
             }}
           />
         </div>
 
         <div style={{ flex: 1 }}>
           {items.length === 0 ? (
-            <div style={{ fontSize: 12, color: "#9B96AA" }}>
+            <div style={{ fontSize: 12, color: theme.colors.subtext, padding: "8px" }}>
               소비 데이터가 없습니다.
             </div>
           ) : (
@@ -88,23 +94,27 @@ export default function SpendingCategoryCard({
                   display: "flex",
                   justifyContent: "space-between",
                   fontSize: 12,
-                  marginBottom: 6,
+                  marginBottom: i < items.length - 1 ? 8 : 0,
+                  alignItems: "center",
                 }}
               >
-                <div style={{ display: "flex", gap: 6 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flex: 1 }}>
                   <span
                     style={{
-                      width: 8,
-                      height: 8,
+                      width: 10,
+                      height: 10,
                       borderRadius: "50%",
                       background: colors[i],
-                      marginTop: 4,
+                      flexShrink: 0,
+                      boxShadow: `0 2px 4px ${colors[i]}40`,
                     }}
                   />
-                  {item.category}
+                  <span style={{ color: theme.colors.text, fontWeight: 600 }}>
+                    {item.category}
+                  </span>
                 </div>
 
-                <strong>{getPercent(item.amount)}</strong>
+                <strong style={{ color: theme.colors.primary }}>{getPercent(item.amount)}</strong>
               </div>
             ))
           )}

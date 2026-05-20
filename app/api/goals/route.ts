@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/components/lib/prisma";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const familyIdParam = req.nextUrl.searchParams.get("familyId");
+
     const goals = await prisma.goal.findMany({
+      where: familyIdParam
+        ? {
+            familyId: Number(familyIdParam),
+          }
+        : undefined,
       orderBy: {
         createdAt: "desc",
       },
@@ -12,6 +19,7 @@ export async function GET() {
     return NextResponse.json(goals);
   } catch (error) {
     console.error("목표 조회 실패:", error);
+
     return NextResponse.json(
       { error: "목표 조회 실패" },
       { status: 500 }
@@ -99,14 +107,9 @@ export async function DELETE(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      success: true,
-    });
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error("목표 삭제 실패:", error);
-    return NextResponse.json(
-      { error: "목표 삭제 실패" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "목표 삭제 실패" }, { status: 500 });
   }
 }

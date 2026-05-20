@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/components/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 type TxType = "INCOME" | "EXPENSE" | "TRANSFER";
 
 async function applyBalance(tx: {
@@ -16,15 +18,13 @@ async function applyBalance(tx: {
     });
   }
 
-  const incomeAccountId = tx.toAccountId || tx.fromAccountId;
-
-  if (tx.type === "INCOME" && incomeAccountId) {
+  if (tx.type === "INCOME" && tx.toAccountId) {
     const toAccount = await prisma.account.findUnique({
-      where: { id: incomeAccountId },
+      where: { id: tx.toAccountId },
     });
 
     await prisma.account.update({
-      where: { id: incomeAccountId },
+      where: { id: tx.toAccountId },
       data: {
         balance: { increment: tx.amount },
         stockCash:
@@ -38,11 +38,16 @@ async function applyBalance(tx: {
       const fromAccount = await prisma.account.findUnique({
         where: { id: tx.fromAccountId },
       });
-
+      const isDebt = ["LOAN", "CARD"].includes(fromAccount?.type ?? "");
+      const currentBalance = Number(fromAccount?.balance ?? 0);
       await prisma.account.update({
         where: { id: tx.fromAccountId },
         data: {
-          balance: { decrement: tx.amount },
+          // 부채 계좌: 잔액이 양수면 증가(부채 늘어남), 음수면 감소(더 깊어짐)
+          // 일반 계좌: 감소
+          balance: isDebt
+            ? (currentBalance >= 0 ? { increment: tx.amount } : { decrement: tx.amount })
+            : { decrement: tx.amount },
           stockCash:
             fromAccount?.type === "STOCK" ? { decrement: tx.amount } : undefined,
         },
@@ -53,11 +58,16 @@ async function applyBalance(tx: {
       const toAccount = await prisma.account.findUnique({
         where: { id: tx.toAccountId },
       });
-
+      const isDebt = ["LOAN", "CARD"].includes(toAccount?.type ?? "");
+      const currentBalance = Number(toAccount?.balance ?? 0);
       await prisma.account.update({
         where: { id: tx.toAccountId },
         data: {
-          balance: { increment: tx.amount },
+          // 부채 계좌로 이체(상환): 잔액이 양수면 감소, 음수면 증가(덜 음수 = 부채 줄어듦)
+          // 일반 계좌: 증가
+          balance: isDebt
+            ? (currentBalance >= 0 ? { decrement: tx.amount } : { increment: tx.amount })
+            : { increment: tx.amount },
           stockCash:
             toAccount?.type === "STOCK" ? { increment: tx.amount } : undefined,
         },
@@ -79,15 +89,13 @@ async function rollbackBalance(tx: {
     });
   }
 
-  const incomeAccountId = tx.toAccountId || tx.fromAccountId;
-
-  if (tx.type === "INCOME" && incomeAccountId) {
+  if (tx.type === "INCOME" && tx.toAccountId) {
     const toAccount = await prisma.account.findUnique({
-      where: { id: incomeAccountId },
+      where: { id: tx.toAccountId },
     });
 
     await prisma.account.update({
-      where: { id: incomeAccountId },
+      where: { id: tx.toAccountId },
       data: {
         balance: { decrement: tx.amount },
         stockCash:
@@ -101,11 +109,14 @@ async function rollbackBalance(tx: {
       const fromAccount = await prisma.account.findUnique({
         where: { id: tx.fromAccountId },
       });
-
+      const isDebt = ["LOAN", "CARD"].includes(fromAccount?.type ?? "");
+      const currentBalance = Number(fromAccount?.balance ?? 0);
       await prisma.account.update({
         where: { id: tx.fromAccountId },
         data: {
-          balance: { increment: tx.amount },
+          balance: isDebt
+            ? (currentBalance >= 0 ? { decrement: tx.amount } : { increment: tx.amount })
+            : { increment: tx.amount },
           stockCash:
             fromAccount?.type === "STOCK" ? { increment: tx.amount } : undefined,
         },
@@ -116,11 +127,14 @@ async function rollbackBalance(tx: {
       const toAccount = await prisma.account.findUnique({
         where: { id: tx.toAccountId },
       });
-
+      const isDebt = ["LOAN", "CARD"].includes(toAccount?.type ?? "");
+      const currentBalance = Number(toAccount?.balance ?? 0);
       await prisma.account.update({
         where: { id: tx.toAccountId },
         data: {
-          balance: { decrement: tx.amount },
+          balance: isDebt
+            ? (currentBalance >= 0 ? { increment: tx.amount } : { decrement: tx.amount })
+            : { decrement: tx.amount },
           stockCash:
             toAccount?.type === "STOCK" ? { decrement: tx.amount } : undefined,
         },
@@ -129,14 +143,21 @@ async function rollbackBalance(tx: {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const familyId = Number(searchParams.get("familyId") || 1);
+    const limitParam = searchParams.get("limit");
+    const limit = limitParam ? Number(limitParam) : undefined;
+
     const transactions = await prisma.transaction.findMany({
+      where: { familyId },
       include: {
         fromAccount: { select: { id: true, name: true, type: true } },
         toAccount: { select: { id: true, name: true, type: true } },
       },
-      orderBy: { transactionAt: "desc" },
+      orderBy: limit ? { id: "desc" } : { transactionAt: "desc" },
+      ...(limit ? { take: limit } : {}),
     });
 
     return NextResponse.json(transactions);

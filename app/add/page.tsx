@@ -5,6 +5,8 @@ import BottomNav from "@/components/navigation/BottomNav";
 import { theme } from "@/components/lib/theme";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { readRecentSms } from "@/components/lib/smsReader";
+import { getCurrentFamilyId, getCurrentUserId } from "@/components/lib/familyCode";
+import { cacheProfileSettings, getProfileSettings } from "@/components/lib/profileSettings";
 
 import {
   X,
@@ -59,7 +61,7 @@ type Account = {
 const typeColorMap = {
   EXPENSE: "#FF6B81",
   INCOME: "#4CD6A5",
-  TRANSFER: theme.colors.primary,
+  TRANSFER: "#5BB8F5",
   STOCK: "#f3a24c",
 };
 
@@ -70,13 +72,16 @@ const typeSoftColorMap = {
    STOCK: "#fff3ec",
 };
 
-const categoryMap = {
-  EXPENSE: [
-    { name: "식비", icon: Utensils },
-  ],
-  INCOME: [{ name: "수입", icon: Wallet }],
-  TRANSFER: [{ name: "이체", icon: ArrowLeftRight }],
-  STOCK: [{ name: "주식", icon: PiggyBank }],
+type CategoryItem = {
+  name: string;
+  icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
+};
+
+const categoryMap: Record<string, CategoryItem[]> = {
+  EXPENSE: [],
+  INCOME: [],
+  TRANSFER: [],
+  STOCK: [],
 };
 
 const customIconMap = {
@@ -125,18 +130,21 @@ const customIconMap = {
 export default function AddTransactionPage() {
   const router = useRouter();
 
-  const [myName, setMyName] = useState("민준");
-  const [partnerName, setPartnerName] = useState("지영");
+  // 서버/클라이언트 초기값은 동일하게 고정 → hydration 불일치 방지
+  // localStorage 캐시 로드는 useEffect에서 처리
+  const [myName, setMyName] = useState("나");
+  const [partnerName, setPartnerName] = useState("파트너");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [favoriteAccountIds, setFavoriteAccountIds] = useState<string[]>([]);
   const [fromAccountId, setFromAccountId] = useState("");
   const [toAccountId, setToAccountId] = useState("");
   const [type, setType] = useState<TransactionType>("EXPENSE");
   const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState("식비");
+  const [category, setCategory] = useState("");
   const [memo, setMemo] = useState("");
-  const [owner, setOwner] = useState("");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [owner, setOwner] = useState("나");
+  const [date, setDate] = useState("");
+  const [accountFilter, setAccountFilter] = useState("");
   const [repeat, setRepeat] = useState("반복 안함");
   const [showOptions, setShowOptions] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -145,17 +153,7 @@ export default function AddTransactionPage() {
 
   const [usedImportIds, setUsedImportIds] = useState<string[]>([]);
   const [selectedImportId, setSelectedImportId] = useState<string>("");
-  const [hiddenImportIds, setHiddenImportIds] = useState<string[]>(() => {
-    if (typeof window === "undefined") return [];
-
-    try {
-      return JSON.parse(
-        localStorage.getItem("alien_hidden_import_ids") || "[]"
-      );
-    } catch {
-      return [];
-    }
-  });
+  const [hiddenImportIds, setHiddenImportIds] = useState<string[]>([]);
 
   const [stockTradeType, setStockTradeType] = useState<"BUY" | "SELL">("BUY");
   const [stockAccountId, setStockAccountId] = useState("");
@@ -264,26 +262,52 @@ const parseImportedMessage = (item: ImportedMessage) => {
   }, [categories, favoriteCategories]);
 
   useEffect(() => {
+    // 클라이언트에서만 실행 (hydration 이후)
+    setDate(new Date().toISOString().slice(0, 10));
     const saved = localStorage.getItem("alien_used_import_ids");
-
     if (saved) {
       setUsedImportIds(JSON.parse(saved));
     }
+    try {
+      const hiddenSaved = localStorage.getItem("alien_hidden_import_ids");
+      if (hiddenSaved) setHiddenImportIds(JSON.parse(hiddenSaved));
+    } catch { /* ignore */ }
   }, []);
 
   useEffect(() => {
-    setMyName(localStorage.getItem("alien_my_name") || "민준");
-    setPartnerName(localStorage.getItem("alien_partner_name") || "지영");
+    // family-settings API에서 userId 기준으로 나/파트너 이름 가져오기
+    const familyId = getCurrentFamilyId();
+    const myUserId = getCurrentUserId();
+    fetch(`/api/family-settings?familyId=${familyId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) return;
+        const meIsOwner = !myUserId || data.owner?.id === myUserId;
+        const me = meIsOwner ? data.owner : data.partner;
+        const partner = meIsOwner ? data.partner : data.owner;
+        const meName = me?.name || "";
+        const partnerName = partner?.name || "";
+        const meColor = me?.color || "#BFEFE0";
+        const partnerColorVal = partner?.color || "#FFD6E8";
+        if (meName) {
+          setMyName(meName);
+          // owner가 아직 기본값("나")이거나 이전 캐시 이름이면 실제 이름으로 갱신
+          setOwner((prev) => (prev === "나" || prev === "" ? meName : prev));
+          // 계좌 필터 초기값: 아직 선택 안 했으면 내 이름으로 설정
+          setAccountFilter((prev) => (prev === "" ? meName : prev));
+        }
+        if (partnerName) setPartnerName(partnerName);
+        cacheProfileSettings(meName, partnerName, meColor, partnerColorVal);
+      })
+      .catch(() => {});
     setFavoriteAccountIds(
       JSON.parse(localStorage.getItem("alien_favorite_account_ids") || "[]")
     );
-    fetch("/api/accounts/simple")
+    fetch(`/api/accounts/simple?familyId=${getCurrentFamilyId()}`)
       .then((res) => res.json())
       .then((data) => {
         const accountList = Array.isArray(data) ? data : data.accounts || [];
         setAccounts(accountList);
-
-        
       })
       .catch(console.error);
   }, []);
@@ -299,6 +323,14 @@ const parseImportedMessage = (item: ImportedMessage) => {
     const sharedAccounts = accounts.filter(
       (account) => !account.owner?.name
     );
+
+  // 나/파트너/공동 필터 적용
+  const filteredAccounts =
+    accountFilter === partnerName
+      ? partnerAccounts
+      : accountFilter === "공동"
+      ? sharedAccounts
+      : myAccounts; // 기본: 나
 
   useEffect(() => {
     if (type !== "STOCK" || !stockAccountId) return;
@@ -330,9 +362,9 @@ const parseImportedMessage = (item: ImportedMessage) => {
     const loadCategories = async () => {
       try {
         // 서버에서 카테고리 로드
-        const res = await fetch(`/api/categories?familyId=1&type=${type}`);
+        const res = await fetch(`/api/categories?familyId=${getCurrentFamilyId()}&type=${type}`);
         const data = await res.json();
-        
+
         if (Array.isArray(data)) {
           // 서버에서 받은 카테고리 처리
           const serverCategories = data.map(cat => ({
@@ -340,7 +372,7 @@ const parseImportedMessage = (item: ImportedMessage) => {
             name: cat.name,
             iconKey: cat.name // 아이콘 키는 이름과 동일하게 설정 (기본값)
           }));
-          
+
           // 기본 카테고리 제외한 커스텀 카테고리만 설정
           const defaultNames = categoryMap[type].map(c => c.name);
           const customCats = serverCategories.filter(
@@ -348,8 +380,13 @@ const parseImportedMessage = (item: ImportedMessage) => {
               !defaultNames.includes(cat.name) &&
               self.findIndex((item) => item.name === cat.name) === index
           );
-          
+
           setCustomCategories(customCats);
+
+          // 첫 번째 카테고리로 초기화 (category가 비어있을 때)
+          if (!category && customCats.length > 0) {
+            setCategory(customCats[0].name);
+          }
         }
         
         // 즐겨찾기는 여전히 로컬에 저장
@@ -408,7 +445,7 @@ const parseImportedMessage = (item: ImportedMessage) => {
 
   const changeType = (nextType: TransactionType) => {
     setType(nextType);
-    setCategory(categoryMap[nextType][0].name);
+    setCategory(""); // 기본 카테고리가 없으므로 빈 값으로 설정
 
     if (nextType === "STOCK") {
       const stockAccount = accounts.find((account) => account.type === "STOCK");
@@ -447,7 +484,7 @@ const parseImportedMessage = (item: ImportedMessage) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          familyId: 1,
+          familyId: getCurrentFamilyId(),
           name,
           type,
           displayOrder: customCategories.length
@@ -459,7 +496,7 @@ const parseImportedMessage = (item: ImportedMessage) => {
       }
 
       const newCategory = await res.json();
-      const refreshRes = await fetch(`/api/categories?familyId=1&type=${type}`);
+      const refreshRes = await fetch(`/api/categories?familyId=${getCurrentFamilyId()}&type=${type}`);
       const refreshData = await refreshRes.json();
 
       setCustomCategories(
@@ -538,7 +575,7 @@ const deleteCategory = async (id: number) => {
       throw new Error("카테고리 삭제 실패");
     }
     
-    const refreshRes = await fetch(`/api/categories?familyId=1&type=${type}`);
+    const refreshRes = await fetch(`/api/categories?familyId=${getCurrentFamilyId()}&type=${type}`);
     const refreshData = await refreshRes.json();
 
     setCustomCategories(
@@ -770,7 +807,7 @@ console.log("MATCH_DEBUG", {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          familyId: 1,
+          familyId: getCurrentFamilyId(),
           userId: 1,
           type,
           amount: Number(amount),
@@ -782,15 +819,17 @@ console.log("MATCH_DEBUG", {
           fromAccountId:
             type === "INCOME" ? null : fromAccountId ? Number(fromAccountId) : null,
           toAccountId:
-            type === "EXPENSE"
-              ? null
-              : type === "TRANSFER"
-              ? toAccountId
-                ? Number(toAccountId)
-                : null
-              : fromAccountId
-              ? Number(fromAccountId)
-              : null,
+          type === "EXPENSE"
+            ? null
+            : type === "TRANSFER"
+            ? toAccountId
+              ? Number(toAccountId)
+              : null
+            : type === "INCOME"
+            ? toAccountId
+              ? Number(toAccountId)
+              : null
+            : null,
         }),
       });
 
@@ -973,47 +1012,96 @@ console.log("MATCH_DEBUG", {
 )}
 {inputMode === "MANUAL" && (
   <>
-        <div style={typeGridStyle}>
-          <TypeButton
-            active={type === "EXPENSE"}
-            label="지출"
-            color={typeColorMap.EXPENSE}
-            onClick={() => changeType("EXPENSE")}
-          />
-          <TypeButton
-            active={type === "INCOME"}
-            label="수입"
-            color={typeColorMap.INCOME}
-            onClick={() => changeType("INCOME")}
-          />
-          <TypeButton
-            active={type === "TRANSFER"}
-            label="이체"
-            color={typeColorMap.TRANSFER}
-            onClick={() => changeType("TRANSFER")}
-          />
-          <TypeButton
-            active={type === "STOCK"}
-            label="주식"
-            color={typeColorMap.STOCK}
-            onClick={() => changeType("STOCK")}
+    {/* ── 히어로 카드: 타입 + 금액 ── */}
+    <div style={{
+      background: `linear-gradient(160deg, ${activeColor}20 0%, ${activeColor}08 100%)`,
+      border: `1.5px solid ${activeColor}40`,
+      borderRadius: 24,
+      padding: "14px 14px 18px",
+    }}>
+      {/* 타입 탭 */}
+      <div style={typeGridStyle}>
+        <TypeButton active={type === "EXPENSE"} label="지출" color={typeColorMap.EXPENSE} onClick={() => changeType("EXPENSE")} />
+        <TypeButton active={type === "INCOME"}  label="수입" color={typeColorMap.INCOME}  onClick={() => changeType("INCOME")}  />
+        <TypeButton active={type === "TRANSFER"} label="이체" color={typeColorMap.TRANSFER} onClick={() => changeType("TRANSFER")} />
+        <TypeButton active={type === "STOCK"}   label="주식" color={typeColorMap.STOCK}   onClick={() => changeType("STOCK")}   />
+      </div>
+
+      {/* 금액 */}
+      <div style={{ ...amountSectionStyle, padding: "14px 0 10px" }}>
+        <div style={amountWrapStyle}>
+          {!amount && <span style={{ ...amountPlaceholderStyle, color: `${activeColor}60` }}>0</span>}
+          <input
+            value={amount ? Number(amount).toLocaleString() : ""}
+            onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
+            style={{ ...amountInputStyle, color: activeColor }}
           />
         </div>
+        <div style={{ fontSize: 12, color: `${activeColor}99`, fontWeight: 700, marginTop: 2 }}>원</div>
+      </div>
 
-<section style={amountSectionStyle}>
-  <div style={amountWrapStyle}>
-    {!amount && <span style={amountPlaceholderStyle}>0</span>}
+      {/* 사용자 + 날짜 한 줄 */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: 8, marginTop: 4 }}>
+        <div style={{ display: "flex", gap: 6 }}>
+          {[myName, partnerName, "공동"].map((name, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => setOwner(name)}
+              style={{
+                height: 30, borderRadius: 999,
+                padding: "0 10px", fontSize: 12, fontWeight: 800,
+                border: owner === name ? `1.5px solid ${activeColor}` : `1px solid ${activeColor}30`,
+                background: owner === name ? `${activeColor}20` : "rgba(255,255,255,0.6)",
+                color: owner === name ? activeColor : `${activeColor}80`,
+                cursor: "pointer",
+              }}
+            >{name}</button>
+          ))}
+        </div>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          style={{
+            border: `1px solid ${activeColor}30`,
+            borderRadius: 10, padding: "4px 8px",
+            fontSize: 12, fontWeight: 700,
+            background: "rgba(255,255,255,0.7)",
+            color: theme.colors.text, outline: "none",
+          }}
+        />
+      </div>
 
-    <input
-      value={amount ? Number(amount).toLocaleString() : ""}
-      onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
-      style={amountInputStyle}
-    />
-  </div>
-</section>
-      {type !== "STOCK" && (
+      {/* 메모 — 히어로 카드 내부 */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8,
+        background: "rgba(255,255,255,0.55)",
+        border: `1px solid ${activeColor}25`,
+        borderRadius: 12, padding: "0 12px", height: 40, marginTop: 10,
+      }}>
+        <span style={{ fontSize: 14, opacity: 0.6 }}>📝</span>
+        <input
+          value={memo}
+          onChange={(e) => setMemo(e.target.value)}
+          placeholder="메모 (선택)"
+          style={{ flex: 1, border: "none", outline: "none", fontSize: 13, fontWeight: 600, background: "transparent", color: theme.colors.text }}
+        />
+      </div>
+    </div>
+      {/* ── 세부 정보 카드: 카테고리 + 계좌 + 메모 ── */}
+      <div style={{
+        background: `linear-gradient(160deg, ${activeColor}10 0%, ${activeColor}04 100%)`,
+        border: `1px solid ${activeColor}28`,
+        borderRadius: 24,
+        padding: "16px 14px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+      }}>
+      {type !== "STOCK" && type !== "TRANSFER" && (
         <section>
-          <label style={labelStyle}>카테고리</label>
+          <label style={{ ...compactLabelStyle, color: `${activeColor}99` }}>카테고리</label>
 
           <div
             ref={categoryScrollRef}
@@ -1027,6 +1115,16 @@ console.log("MATCH_DEBUG", {
             onTouchEnd={endCategoryDrag}
           >
             <div style={categoryScrollStyle}>
+              {sortedCategories.length === 0 && (
+                <div style={{
+                  padding: "10px 4px",
+                  fontSize: 12,
+                  color: theme.colors.subtext,
+                  whiteSpace: "nowrap",
+                }}>
+                  프로필 → 카테고리 관리에서 추가해주세요
+                </div>
+              )}
               {sortedCategories.map((item) => {
                 const Icon = item.icon;
                 const active = category === item.name;
@@ -1139,25 +1237,13 @@ console.log("MATCH_DEBUG", {
                 );
               })}
 
-              <button
-                type="button"
-                onClick={() => setShowAddCategory(true)}
-                style={{
-                  ...categoryChipStyle,
-                  border: `1px dashed ${theme.colors.border}`,
-                  background: "#FFFFFF",
-                  color: activeColor,
-                }}
-              >
-                <Plus size={15} />
-                추가
-              </button>
+              {/* 카테고리 추가는 프로필 > 카테고리 관리에서만 가능 */}
             </div>
           </div>
         </section>
       )}
 
-        {showAddCategory && (
+        {false && showAddCategory && (
           <section style={addCategoryBoxStyle}>
             <div style={addCategoryHeaderStyle}>
               <strong>새 카테고리 추가</strong>
@@ -1225,239 +1311,233 @@ console.log("MATCH_DEBUG", {
           </section>
         )}
 
-        <section>
-          <label style={labelStyle}>사용자</label>
-          <div style={userGridStyle}>
-            {[myName, partnerName, "공동"].map((name) => (
-              <UserButton
-                key={name}
-                label={name}
-                active={owner === name}
-                onClick={() => setOwner(name)}
-              />
-            ))}
-          </div>
-        </section>
 
 {type === "STOCK" ? (
-  <section style={{ display: "grid", gap: 12 }}>
-    <label style={labelStyle}>주식 거래</label>
+  <section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
-    <div style={userGridStyle}>
-      <UserButton
-        label="매수"
-        active={stockTradeType === "BUY"}
-        onClick={() => setStockTradeType("BUY")}
-      />
-      <UserButton
-        label="매도"
-        active={stockTradeType === "SELL"}
-        onClick={() => setStockTradeType("SELL")}
-      />
-      <div />
+    {/* 매수 / 매도 토글 */}
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+      {([
+        { key: "BUY",  label: "📈 매수", color: "#4CD6A5" },
+        { key: "SELL", label: "📉 매도", color: "#FF6B81" },
+      ] as const).map(({ key, label, color }) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => setStockTradeType(key)}
+          style={{
+            height: 48, borderRadius: 18,
+            border: stockTradeType === key ? `1.5px solid ${color}` : `1px solid ${activeColor}25`,
+            background: stockTradeType === key
+              ? `linear-gradient(135deg, ${color}20 0%, ${color}08 100%)`
+              : "rgba(255,255,255,0.6)",
+            color: stockTradeType === key ? color : theme.colors.subtext,
+            fontWeight: 900, fontSize: 15,
+            cursor: "pointer",
+          }}
+        >{label}</button>
+      ))}
     </div>
 
-    <AccountSelect
-      label="증권"
-      value={stockAccountId}
-      accounts={accounts.filter((account) => account.type === "STOCK")}
-      onChange={setStockAccountId}
-    />
+    {/* 증권 계좌 */}
+    <div>
+      <label style={{ ...compactLabelStyle, color: `${activeColor}99` }}>증권 계좌</label>
+      <AccountSelect
+        label=""
+        value={stockAccountId}
+        accounts={accounts.filter((account) => account.type === "STOCK")}
+        onChange={setStockAccountId}
+        activeColor={activeColor}
+      />
+    </div>
 
-<div style={accountSelectWrapStyle}>
-  <span style={accountSelectLabelStyle}>종목</span>
-  <select
-    value={stockMode === "NEW" ? "__NEW__" : selectedStockId}
-    onChange={(e) => {
-      const value = e.target.value;
+    {/* 종목 선택 */}
+    <div style={{
+      height: 52, borderRadius: 18,
+      border: `1px solid ${activeColor}28`,
+      display: "grid", gridTemplateColumns: "auto 1fr",
+      alignItems: "center", padding: "0 14px", gap: 8,
+      background: "rgba(255,255,255,0.75)",
+    }}>
+      <span style={{ fontSize: 12, fontWeight: 900, color: `${activeColor}99`, whiteSpace: "nowrap" }}>종목</span>
+      <select
+        value={stockMode === "NEW" ? "__NEW__" : selectedStockId}
+        onChange={(e) => {
+          const value = e.target.value;
+          if (value === "__NEW__") {
+            setStockMode("NEW");
+            setSelectedStockId("");
+            setStockName("");
+            setStockCode("");
+            return;
+          }
+          setStockMode("EXISTING");
+          setSelectedStockId(value);
+          const selected = stockHoldings.find((item) => String(item.id) === value);
+          if (selected) { setStockName(selected.name); setStockCode(selected.code); }
+        }}
+        style={{ ...accountSelectStyle, color: theme.colors.text }}
+      >
+        <option value="">보유종목 선택</option>
+        {stockHoldings.map((item) => (
+          <option key={item.id} value={item.id}>{item.name}({item.code})</option>
+        ))}
+        <option value="__NEW__">+ 신규 종목 추가</option>
+      </select>
+    </div>
 
-      if (value === "__NEW__") {
-        setStockMode("NEW");
-        setSelectedStockId("");
-        setStockName("");
-        setStockCode("");
-        return;
-      }
+    {stockMode === "NEW" && (
+      <div style={{ display: "grid", gap: 8 }}>
+        <input
+          value={stockName}
+          onChange={(e) => setStockName(e.target.value)}
+          placeholder="종목명 예: 삼성전자"
+          style={{
+            ...categoryNameInputStyle,
+            border: `1px solid ${activeColor}28`,
+            background: "rgba(255,255,255,0.75)",
+          }}
+        />
+        <input
+          value={stockCode}
+          onChange={(e) => setStockCode(e.target.value)}
+          placeholder="종목코드 예: 005930"
+          style={{
+            ...categoryNameInputStyle,
+            border: `1px solid ${activeColor}28`,
+            background: "rgba(255,255,255,0.75)",
+          }}
+        />
+      </div>
+    )}
 
-      setStockMode("EXISTING");
-      setSelectedStockId(value);
-
-      const selected = stockHoldings.find(
-        (item) => String(item.id) === value
-      );
-
-      if (selected) {
-        setStockName(selected.name);
-        setStockCode(selected.code);
-      }
-    }}
-    style={accountSelectStyle}
-  >
-    <option value="">보유종목 선택</option>
-
-    {stockHoldings.map((item) => (
-      <option key={item.id} value={item.id}>
-        {item.name}({item.code})
-      </option>
-    ))}
-
-    <option value="__NEW__">+ 신규 종목 추가</option>
-  </select>
-</div>
-
-{stockMode === "NEW" && (
-  <>
-    <input
-      value={stockName}
-      onChange={(e) => setStockName(e.target.value)}
-      placeholder="종목명 예: 삼성전자"
-      style={categoryNameInputStyle}
-    />
-
-    <input
-      value={stockCode}
-      onChange={(e) => setStockCode(e.target.value)}
-      placeholder="종목코드 예: 005930"
-      style={categoryNameInputStyle}
-    />
-  </>
-)}
-
-    <input
-      value={stockQuantity}
-      onChange={(e) => setStockQuantity(e.target.value)}
-      placeholder="수량"
-      type="number"
-      style={categoryNameInputStyle}
-    />
-
-    <input
-      value={stockPrice}
-      onChange={(e) => setStockPrice(e.target.value)}
-      placeholder="단가"
-      type="number"
-      style={categoryNameInputStyle}
-    />
+    {/* 수량 / 단가 */}
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+      {[
+        { value: stockQuantity, setter: setStockQuantity, placeholder: "수량" },
+        { value: stockPrice,    setter: setStockPrice,    placeholder: "단가" },
+      ].map(({ value, setter, placeholder }) => (
+        <input
+          key={placeholder}
+          value={value}
+          onChange={(e) => setter(e.target.value)}
+          placeholder={placeholder}
+          type="number"
+          style={{
+            ...categoryNameInputStyle,
+            border: `1px solid ${activeColor}28`,
+            background: "rgba(255,255,255,0.75)",
+          }}
+        />
+      ))}
+    </div>
   </section>
 ) : (
   <section>
-    <label style={labelStyle}>
-      {type === "INCOME"
-        ? "입금 계좌"
-        : type === "EXPENSE"
-        ? "출금 계좌"
-        : "이체 계좌"}
-    </label>
+    {/* 계좌 레이블 + 나/파트너/공동 토글 (이체는 필터 없이 전체 표시) */}
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+      <label style={{ ...compactLabelStyle, marginBottom: 0, color: `${activeColor}99` }}>
+        {type === "INCOME" ? "입금 계좌" : type === "EXPENSE" ? "출금 계좌" : "이체 계좌"}
+      </label>
+      {type !== "TRANSFER" && (
+        <div style={{ display: "flex", gap: 4 }}>
+          {([myName, partnerName, "공동"] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setAccountFilter(f)}
+              style={{
+                height: 24, padding: "0 8px", borderRadius: 999,
+                fontSize: 11, fontWeight: 800, cursor: "pointer",
+                border: accountFilter === f ? `1.5px solid ${activeColor}` : `1px solid ${activeColor}25`,
+                background: accountFilter === f ? `${activeColor}18` : "rgba(255,255,255,0.6)",
+                color: accountFilter === f ? activeColor : theme.colors.subtext,
+              }}
+            >{f}</button>
+          ))}
+        </div>
+      )}
+    </div>
 
     {type === "TRANSFER" ? (
       <div style={{ display: "grid", gap: 10 }}>
         <AccountSelect
+          label="출금"
           value={fromAccountId}
           accounts={accounts}
           onChange={setFromAccountId}
+          activeColor={activeColor}
         />
         <AccountSelect
+          label="입금"
           value={toAccountId}
           accounts={accounts}
           onChange={setToAccountId}
+          activeColor={activeColor}
         />
       </div>
     ) : (
       <AccountSelect
         label={type === "INCOME" ? "입금" : "출금"}
         value={fromAccountId}
-        accounts={accounts}
+        accounts={filteredAccounts}
         onChange={setFromAccountId}
+        activeColor={activeColor}
       />
     )}
   </section>
 )}
 
-        <section>
-          <label style={labelStyle}>메모 (선택)</label>
-          <textarea
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-            placeholder="메모를 입력하세요"
-            style={memoStyle}
-          />
-        </section>
-
-        <section style={extraBoxStyle}>
-          <button
-            type="button"
-            onClick={() => setShowOptions((prev) => !prev)}
-            style={extraHeaderButtonStyle}
-          >
-            <span>추가 옵션</span>
-            <ChevronDown size={18} />
-          </button>
-
-          {showOptions && (
-            <>
-              <div style={extraRowStyle}>
-                <div style={extraLabelStyle}>
-                  <CalendarDays size={16} />
-                  날짜
-                </div>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  style={dateInputStyle}
-                />
-              </div>
-
-              <div style={extraRowStyle}>
-                <div style={extraLabelStyle}>
-                  <Repeat size={16} />
-                  반복
-                </div>
-                <select
-                  value={repeat}
-                  onChange={(e) => setRepeat(e.target.value)}
-                  style={selectStyle}
-                >
-                  <option>반복 안함</option>
-                  <option>매일</option>
-                  <option>매주</option>
-                  <option>매월</option>
-                </select>
-              </div>
-            </>
-          )}
-        </section>
-
-        <button
-          onClick={saveTransaction}
-          disabled={isSaving}
-          style={{
-            ...saveButtonStyle,
-            background: `linear-gradient(135deg, ${theme.colors.primary} 0%, #A992FF 100%)`,
-            opacity: isSaving ? 0.6 : 1,
-          }}
-        >
-          {isSaving ? "저장 중..." : "저장"}
-        </button>
+      </div>{/* ── 세부 정보 카드 끝 ── */}
 
       </>
     )}
-    
+
         <BottomNav />
       </div>
+
+      {/* ── 저장 버튼: 하단바 바로 위 고정 ── */}
+      {inputMode === "MANUAL" && (
+        <div style={{
+          position: "fixed",
+          bottom: 88,
+          left: 0, right: 0,
+          padding: "10px 18px",
+          background: "linear-gradient(to top, rgba(255,255,255,1) 60%, rgba(255,255,255,0))",
+          zIndex: 50,
+          display: "flex",
+          justifyContent: "center",
+        }}>
+          <button
+            onClick={saveTransaction}
+            disabled={isSaving}
+            style={{
+              ...saveButtonStyle,
+              width: "100%",
+              maxWidth: 390,
+              background: isSaving
+                ? theme.colors.border
+                : `linear-gradient(135deg, ${activeColor} 0%, ${theme.colors.primary} 100%)`,
+              opacity: isSaving ? 0.7 : 1,
+              color: isSaving ? theme.colors.subtext : "#FFFFFF",
+              boxShadow: isSaving ? "none" : `0 8px 24px ${activeColor}50`,
+            }}
+          >
+            {isSaving ? "저장 중..." : "저장"}
+          </button>
+        </div>
+      )}
     </main>
     
   );
 }
 
-const getAccountOwnerLabel = (account: Account) => {
-  const myName = localStorage.getItem("alien_my_name") || "나";
-  const partnerName = localStorage.getItem("alien_partner_name") || "파트너";
-
-  if (account.owner?.role === "OWNER") return myName;
-  if (account.owner?.role === "MEMBER") return partnerName;
-
-  return "공동";
+const getAccountOwnerLabel = (account: Account, myUserId?: number) => {
+  // 계좌 소유자는 고정이므로 DB 실제 이름 사용
+  // 단, 현재 기기 사용자 본인 계좌는 "나"로 표시
+  if (!account.owner) return "공동";
+  if (myUserId && account.owner.id === myUserId) return "나";
+  return account.owner.name || "공동";
 };
 
 function TypeButton({
@@ -1525,15 +1605,22 @@ function AccountSelect({
   value,
   accounts,
   onChange,
+  activeColor = theme.colors.primary,
 }: {
   label?: string;
   value: string;
   accounts: Account[];
   onChange: (value: string) => void;
+  activeColor?: string;
 }) {
-  const myAccounts = accounts.filter((account) => account.owner?.role === "OWNER");
-  const partnerAccounts = accounts.filter((account) => account.owner?.role === "MEMBER");
-  const sharedAccounts = accounts.filter((account) => !account.owner?.role);
+  const myUserId = getCurrentUserId();
+  const myAccounts = accounts.filter((a) =>
+    myUserId ? a.owner?.id === myUserId : a.owner?.role === "OWNER"
+  );
+  const partnerAccounts = accounts.filter((a) =>
+    myUserId ? (a.owner && a.owner.id !== myUserId) : a.owner?.role === "MEMBER"
+  );
+  const sharedAccounts = accounts.filter((a) => !a.owner);
   const [favoriteAccountIds, setFavoriteAccountIds] = useState<string[]>(() => {
   if (typeof window === "undefined") return [];
 
@@ -1561,34 +1648,23 @@ const toggleFavoriteAccount = (accountId: string) => {
       return aFav - bFav;
     });
   };
-  return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <AccountGroup
-        title="내 계좌"
-        accounts={sortAccountsByFavorite(myAccounts)}
-        selectedId={value}
-        favoriteAccountIds={favoriteAccountIds}
-        onToggleFavorite={toggleFavoriteAccount}
-        onSelect={onChange}
-      />
-      <AccountGroup
-        title="파트너 계좌"
-        accounts={sortAccountsByFavorite(partnerAccounts)}
-        selectedId={value}
-        favoriteAccountIds={favoriteAccountIds}
-        onToggleFavorite={toggleFavoriteAccount}
-        onSelect={onChange}
-      />
+  const allAccounts = sortAccountsByFavorite([
+    ...myAccounts,
+    ...partnerAccounts,
+    ...sharedAccounts,
+  ]);
 
-      <AccountGroup
-        title="공동 계좌"
-        accounts={sortAccountsByFavorite(sharedAccounts)}
-        selectedId={value}
-        favoriteAccountIds={favoriteAccountIds}
-        onToggleFavorite={toggleFavoriteAccount}
-        onSelect={onChange}
-      />
-    </div>
+  return (
+    <AccountGroup
+      title={label}
+      accounts={allAccounts}
+      selectedId={value}
+      favoriteAccountIds={favoriteAccountIds}
+      onToggleFavorite={toggleFavoriteAccount}
+      onSelect={onChange}
+      myUserId={myUserId}
+      activeColor={activeColor}
+    />
   );
 }
 
@@ -1599,6 +1675,8 @@ function AccountGroup({
   favoriteAccountIds,
   onToggleFavorite,
   onSelect,
+  myUserId,
+  activeColor = theme.colors.primary,
 }: {
     title: string;
     accounts: Account[];
@@ -1606,21 +1684,34 @@ function AccountGroup({
     favoriteAccountIds: string[];
     onToggleFavorite: (accountId: string) => void;
     onSelect: (value: string) => void;
+    myUserId?: number;
+    activeColor?: string;
 }) {
-  if (accounts.length === 0) return null;
+  if (accounts.length === 0) return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <div style={{ fontSize: 12, fontWeight: 900, color: theme.colors.subtext, paddingLeft: 2 }}>
+        {title}
+      </div>
+      <div style={{ fontSize: 12, color: theme.colors.subtext, paddingLeft: 2 }}>
+        분석 → 자산 → 리스트 추가에서 계좌를 먼저 추가해주세요
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ display: "grid", gap: 8 }}>
-      <div
-        style={{
-          fontSize: 12,
-          fontWeight: 900,
-          color: theme.colors.subtext,
-          paddingLeft: 2,
-        }}
-      >
-        {title}
-      </div>
+      {title ? (
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 900,
+            color: theme.colors.text,
+            paddingLeft: 2,
+          }}
+        >
+          {title}
+        </div>
+      ) : null}
 
       <div
         style={{
@@ -1649,9 +1740,9 @@ function AccountGroup({
                 position: "relative",
                 borderRadius: 18,
                 border: selected
-                  ? `1.5px solid ${theme.colors.primary}`
-                  : `1px solid ${theme.colors.border}`,
-                background: selected ? theme.colors.primarySoft : "#FFFFFF",
+                  ? `1.5px solid ${activeColor}`
+                  : `1px solid ${activeColor}25`,
+                background: selected ? `${activeColor}15` : "rgba(255,255,255,0.75)",
                 padding: "10px 28px 10px 12px",
                 display: "flex",
                 alignItems: "center",
@@ -1731,7 +1822,7 @@ function AccountGroup({
       maxWidth:78,
     }}
   >
-    {account.type}
+    {getAccountOwnerLabel(account, myUserId)}
   </div>
 </div>
               </div>
@@ -1756,7 +1847,7 @@ const getAccountIcon = (type: string) => {
 const pageStyle = {
   minHeight: "100vh",
   background: "#FFFFFF",
-  padding: "16px 18px 96px",
+  padding: "16px 18px 180px",
   display: "flex",
   justifyContent: "center",
 } as const;
@@ -1766,7 +1857,17 @@ const containerStyle = {
   maxWidth: 390,
   display: "flex",
   flexDirection: "column",
-  gap: 16,
+  gap: 10,
+} as const;
+
+const compactLabelStyle = {
+  display: "block",
+  fontSize: 11,
+  fontWeight: 900,
+  marginBottom: 8,
+  color: theme.colors.subtext,
+  textTransform: "uppercase" as const,
+  letterSpacing: 0.5,
 } as const;
 
 const headerStyle: React.CSSProperties = {
@@ -1939,7 +2040,7 @@ const accountSelectWrapStyle = {
   alignItems: "center",
   padding: "0 14px",
   gap: 8,
-  background: "#FFFFFF",
+  background: "rgba(255,255,255,0.75)",
 } as const;
 
 const accountSelectLabelStyle = {

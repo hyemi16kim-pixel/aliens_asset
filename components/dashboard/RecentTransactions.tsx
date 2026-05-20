@@ -86,30 +86,35 @@ const getIcon = (tx: Transaction) => {
   return (
     <section
       style={{
-        background: "white",
-        borderRadius: 22,
-        padding: "16px",
+        background: theme.colors.card,
+        borderRadius: 24,
+        padding: "20px",
         border: `1px solid ${theme.colors.border}`,
+        boxShadow: theme.shadow.sm,
       }}
     >
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
-          marginBottom: 12,
+          alignItems: "center",
+          marginBottom: 14,
         }}
       >
-        <strong style={{ fontSize: 14 }}>최근 거래내역</strong>
+        <strong style={{ fontSize: 15, fontWeight: 800, color: theme.colors.text }}>최근 거래내역</strong>
         <Link
           href="/transactions"
           style={{
             fontSize: 11,
             color: theme.colors.primary,
             textDecoration: "none",
-            fontWeight: 700,
+            fontWeight: 800,
+            transition: "color 0.2s ease",
           }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = theme.colors.primaryDark)}
+          onMouseLeave={(e) => (e.currentTarget.style.color = theme.colors.primary)}
         >
-          전체 보기
+          전체 보기 →
         </Link>
       </div>
 
@@ -118,6 +123,10 @@ const getIcon = (tx: Transaction) => {
           style={{
             fontSize: 13,
             color: theme.colors.subtext,
+            padding: "20px",
+            textAlign: "center",
+            background: theme.colors.bgLight,
+            borderRadius: 12,
           }}
         >
           아직 거래가 없습니다.
@@ -135,8 +144,21 @@ const getIcon = (tx: Transaction) => {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              padding: "8px 0",
+              padding: "12px",
               fontSize: 13,
+              borderRadius: 12,
+              marginBottom: 6,
+              background: theme.colors.bgLight,
+              border: `1px solid ${theme.colors.border}`,
+              transition: "all 0.2s ease",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = theme.colors.border;
+              e.currentTarget.style.transform = "translateX(2px)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = theme.colors.bgLight;
+              e.currentTarget.style.transform = "translateX(0)";
             }}
           >
             <div
@@ -232,12 +254,12 @@ const getIcon = (tx: Transaction) => {
 const scrollListStyle = {
   height: 150,
   maxHeight: 190,
-  overflowY: "scroll",
+  overflowY: "auto",
   overflowX: "hidden",
   WebkitOverflowScrolling: "touch",
   overscrollBehavior: "contain",
   touchAction: "pan-y",
-  paddingRight: 4,
+  paddingRight: 2,
 } as const;
 
 

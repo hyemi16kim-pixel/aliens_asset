@@ -1,24 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/components/lib/prisma";
 
-export async function GET() {
-  try {
-    const family = await prisma.family.findUnique({
-      where: { code: "ALIEN-001" },
-    });
+export const dynamic = "force-dynamic";
 
-    if (!family) {
-      return NextResponse.json([]);
-    }
+export async function GET(req: NextRequest) {
+  try {
+    const familyId = Number(req.nextUrl.searchParams.get("familyId") || 1);
 
     const accounts = await prisma.account.findMany({
-      where: { familyId: family.id },
-      include: {
-        owner: true,
-      },
-      orderBy: {
-        displayOrder: "asc",
-      },
+      where: { familyId },
+      include: { owner: true },
+      orderBy: { displayOrder: "asc" },
     });
 
     const now = new Date();
@@ -39,83 +31,30 @@ export async function GET() {
         const nextStart = new Date(year, month, endDay + 1);
         const nextEnd = new Date(year, month + 1, endDay, 23, 59, 59);
 
-        const [thisTxs, nextTxs] = await Promise.all([
+        const [thisTxs, nextTxs, thisPaidTxs, nextPaidTxs] = await Promise.all([
           prisma.transaction.findMany({
-            where: {
-              familyId: family.id,
-              type: "EXPENSE",
-              fromAccountId: account.id,
-              transactionAt: {
-                gte: thisStart,
-                lte: thisEnd,
-              },
-            },
+            where: { familyId, type: "EXPENSE", fromAccountId: account.id, transactionAt: { gte: thisStart, lte: thisEnd } },
           }),
           prisma.transaction.findMany({
-            where: {
-              familyId: family.id,
-              type: "EXPENSE",
-              fromAccountId: account.id,
-              transactionAt: {
-                gte: nextStart,
-                lte: nextEnd,
-              },
-            },
+            where: { familyId, type: "EXPENSE", fromAccountId: account.id, transactionAt: { gte: nextStart, lte: nextEnd } },
+          }),
+          prisma.transaction.findMany({
+            where: { familyId, type: "TRANSFER", toAccountId: account.id, transactionAt: { gte: thisStart, lte: thisEnd } },
+          }),
+          prisma.transaction.findMany({
+            where: { familyId, type: "TRANSFER", toAccountId: account.id, transactionAt: { gte: nextStart, lte: nextEnd } },
           }),
         ]);
 
-const [thisPaidTxs, nextPaidTxs] = await Promise.all([
-  prisma.transaction.findMany({
-    where: {
-      familyId: family.id,
-      type: "TRANSFER",
-      toAccountId: account.id,
-      transactionAt: {
-        gte: thisStart,
-        lte: thisEnd,
-      },
-    },
-  }),
-  prisma.transaction.findMany({
-    where: {
-      familyId: family.id,
-      type: "TRANSFER",
-      toAccountId: account.id,
-      transactionAt: {
-        gte: nextStart,
-        lte: nextEnd,
-      },
-    },
-  }),
-]);
-
-const thisExpense = thisTxs.reduce(
-  (sum: number, tx: any) => sum + Number(tx.amount || 0),
-  0
-);
-
-const nextExpense = nextTxs.reduce(
-  (sum: number, tx: any) => sum + Number(tx.amount || 0),
-  0
-);
-
-const thisPaid = thisPaidTxs.reduce(
-  (sum: number, tx: any) => sum + Number(tx.amount || 0),
-  0
-);
-
-const nextPaid = nextPaidTxs.reduce(
-  (sum: number, tx: any) => sum + Number(tx.amount || 0),
-  0
-);
-
-const nextPaymentAmount = Math.max(thisExpense - thisPaid, 0);
-const nextMonthAmount = Math.max(nextExpense - nextPaid, 0);
+        const thisExpense = thisTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
+        const nextExpense = nextTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
+        const thisPaid = thisPaidTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
+        const nextPaid = nextPaidTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
 
         return {
           ...account,
-          nextPaymentAmount,
-          nextMonthAmount,
+          nextPaymentAmount: Math.max(thisExpense - thisPaid, 0),
+          nextMonthAmount: Math.max(nextExpense - nextPaid, 0),
         };
       })
     );
@@ -123,35 +62,27 @@ const nextMonthAmount = Math.max(nextExpense - nextPaid, 0);
     return NextResponse.json(withCardAmounts);
   } catch (error) {
     console.error("ACCOUNTS_GET_ERROR", error);
-
-    return NextResponse.json(
-      { error: "계좌 조회 실패" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "계좌 조회 실패" }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const family = await prisma.family.upsert({
-      where: { code: "ALIEN-001" },
-      update: {},
-      create: {
-        code: "ALIEN-001",
-        name: "우리 가족",
-      },
-    });
+    const familyId = Number(body.familyId || 1);
+
     const account = await prisma.account.create({
       data: {
-        familyId: family.id,
+        familyId,
         cardPaymentDay: body.cardPaymentDay ?? null,
         cardCycleStartDay: body.cardCycleStartDay ?? null,
         cardCycleEndDay: body.cardCycleEndDay ?? null,
         name: body.name,
         type: body.type,
         color: body.color || "#F6F0FF",
-        balance: Number(body.balance || 0),
+        balance: ["LOAN", "CARD"].includes(body.type)
+          ? Math.abs(Number(body.balance || 0))
+          : Number(body.balance || 0),
         memo: body.memo || null,
         ownerId: body.ownerId ?? null,
         nextPaymentDate: body.nextPaymentDate ? new Date(body.nextPaymentDate) : null,
@@ -165,12 +96,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(account);
   } catch (error) {
     console.error("ACCOUNTS_POST_ERROR", error);
-
     return NextResponse.json(
-      {
-        error: "계좌 추가 실패",
-        detail: error instanceof Error ? error.message : String(error),
-      },
+      { error: "계좌 추가 실패", detail: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }
@@ -210,9 +137,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "계좌 ID 필요" }, { status: 400 });
     }
 
-    await prisma.account.delete({
-      where: { id },
-    });
+    await prisma.account.delete({ where: { id } });
 
     return NextResponse.json({ success: true });
   } catch (error) {

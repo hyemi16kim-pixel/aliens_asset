@@ -118,10 +118,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const familyId = Number(body.familyId || account.familyId || 1);
+    const userId = body.userId ? Number(body.userId) : null;
+
     await prisma.transaction.create({
       data: {
-        familyId: 1,
-        userId: 1,
+        familyId,
+        userId,
         owner,
         type: tradeType === "BUY" ? "EXPENSE" : "INCOME",
         amount: tradeAmount,
@@ -135,9 +138,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {
-    return NextResponse.json(
-      { error: "주식 거래 저장 실패", detail: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "주식 거래 저장 실패", detail: error.message }, { status: 500 });
   }
 }

@@ -34,8 +34,10 @@ export default function RootLayout({
       <body
         className="min-h-full flex flex-col"
         style={{
-          background: "#f7f4f8",
-          color: "#18111b",
+          background: "linear-gradient(180deg, #faf7ff 0%, #f5f0ff 50%, #faf7ff 100%)",
+          color: "#2d2545",
+          margin: 0,
+          padding: 0,
         }}
       >
         {children}

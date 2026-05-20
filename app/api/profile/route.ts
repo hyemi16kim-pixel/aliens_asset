@@ -1,15 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/components/lib/prisma";
 
-export async function GET() {
+export const dynamic = "force-dynamic";
+
+export async function GET(req: NextRequest) {
   try {
+    const code = req.nextUrl.searchParams.get("code") || "ALIEN-001";
+
     const family = await prisma.family.upsert({
-      where: { code: "ALIEN-001" },
+      where: { code },
       update: {},
-      create: {
-        code: "ALIEN-001",
-        name: "우리 가족",
-      },
+      create: { code, name: code },
     });
 
     const owner =
@@ -17,11 +18,7 @@ export async function GET() {
         where: { familyId: family.id, role: "OWNER" },
       })) ||
       (await prisma.user.create({
-        data: {
-          familyId: family.id,
-          role: "OWNER",
-          name: "나",
-        },
+        data: { familyId: family.id, role: "OWNER", name: "나" },
       }));
 
     const member =
@@ -29,45 +26,39 @@ export async function GET() {
         where: { familyId: family.id, role: "MEMBER" },
       })) ||
       (await prisma.user.create({
-        data: {
-          familyId: family.id,
-          role: "MEMBER",
-          name: "파트너",
-        },
+        data: { familyId: family.id, role: "MEMBER", name: "파트너" },
       }));
 
     const fullFamily = await prisma.family.findUnique({
       where: { id: family.id },
-      include: {
-        goals: true,
-        transactions: true,
-      },
+      include: { goals: true, transactions: true },
     });
 
     const transactions = fullFamily?.transactions || [];
     const goals = fullFamily?.goals || [];
 
-      const totalIncome = transactions
-        .filter((tx: any) => tx.type === "INCOME")
-        .reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
+    const totalIncome = transactions
+      .filter((tx: any) => tx.type === "INCOME")
+      .reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
 
-      const totalExpense = transactions
-        .filter((tx: any) => tx.type === "EXPENSE")
-        .reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
+    const totalExpense = transactions
+      .filter((tx: any) => tx.type === "EXPENSE")
+      .reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
 
-const totalTarget = goals.reduce(
-  (sum: number, goal: any) => sum + goal.targetAmount,
-  0
-);
+    const totalTarget = goals.reduce(
+      (sum: number, goal: any) => sum + goal.targetAmount,
+      0
+    );
 
-const totalCurrent = goals.reduce(
-  (sum: number, goal: any) => sum + goal.currentAmount,
-  0
-);
+    const totalCurrent = goals.reduce(
+      (sum: number, goal: any) => sum + goal.currentAmount,
+      0
+    );
 
     return NextResponse.json({
       familyCode: family.code,
       familyName: family.name,
+      familyId: family.id,
       users: [owner, member],
       totalAsset: totalIncome - totalExpense,
       monthlySaving: totalIncome - totalExpense,
