@@ -5,13 +5,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { setCurrentFamily, setCurrentUserId, getCurrentFamilyId, getCurrentFamilyCode } from "@/components/lib/familyCode";
 import { cacheProfileSettings } from "@/components/lib/profileSettings";
 import { theme } from "@/components/lib/theme";
+import { Suspense } from "react";
 
 type Step = "code" | "user";
 type FamilyUser = { id: number; name: string; color?: string; role: string };
 
-export default function SetupPage() {
+function SetupPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const stepParam = searchParams.get("step");
   const [step, setStep] = useState<Step>("code");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -20,7 +22,7 @@ export default function SetupPage() {
   const [partner, setPartner] = useState<FamilyUser | null>(null);
 
   useEffect(() => {
-    if (searchParams.get("step") === "user") {
+    if (stepParam === "user") {
       const familyId = getCurrentFamilyId();
       if (familyId) {
         setLoading(true);
@@ -204,7 +206,7 @@ export default function SetupPage() {
               );
             })}
 
-            {searchParams.get("step") === "user" ? (
+            {stepParam === "user" ? (
               <button
                 onClick={function() { router.replace("/profile"); }}
                 style={{ background: "transparent", border: "none", color: theme.colors.subtext, fontSize: 13, cursor: "pointer", padding: "8px 0" }}
@@ -228,5 +230,14 @@ export default function SetupPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+
+export default function SetupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SetupPageContent />
+    </Suspense>
   );
 }
