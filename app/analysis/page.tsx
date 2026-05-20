@@ -9,6 +9,7 @@ import { theme } from "@/components/lib/theme";
 import { getCurrentFamilyId, getCurrentFamilyCode } from "@/components/lib/familyCode";
 import AssetAccountGrid from "@/components/analysis/AssetAccountGrid";
 import StockHoldingList from "@/components/analysis/StockHoldingList";
+import { Suspense } from "react";
 
 import { TrendingUp, TrendingDown } from "lucide-react";
 import {
@@ -169,7 +170,7 @@ type Account = {
   } | null;
 };
 
-export default function AnalysisPage() {
+function AnalysisPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -1854,3 +1855,11 @@ const backButtonStyle = {
   placeItems: "center",
   cursor: "pointer",
 } as const;
+
+export default function AnalysisPage() {
+  return (
+    <Suspense fallback={null}>
+      <AnalysisPageContent />
+    </Suspense>
+  );
+}
