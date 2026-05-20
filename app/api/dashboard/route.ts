@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
     const familyIdParam = req.nextUrl.searchParams.get("familyId");
     const familyId = familyIdParam ? Number(familyIdParam) : undefined;
 
-    const familyWhere = familyId ? { familyId } : {};
+    const familyWhere = familyId ? { familyId } : { familyId: -1 };
 
     const monthStartDay = Math.min(
       Math.max(Number.isFinite(monthStartDayParam) ? monthStartDayParam : 1, 1),

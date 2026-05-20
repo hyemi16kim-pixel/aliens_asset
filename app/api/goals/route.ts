@@ -6,11 +6,13 @@ export async function GET(req: NextRequest) {
     const familyIdParam = req.nextUrl.searchParams.get("familyId");
 
     const goals = await prisma.goal.findMany({
-      where: familyIdParam
-        ? {
-            familyId: Number(familyIdParam),
-          }
-        : undefined,
+    where: familyIdParam
+      ? {
+          familyId: Number(familyIdParam),
+        }
+      : {
+          familyId: -1,
+        },
       orderBy: {
         createdAt: "desc",
       },
