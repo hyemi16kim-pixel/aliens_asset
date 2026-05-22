@@ -80,7 +80,7 @@ const navWrapStyle = {
   position: "fixed",
   left: 0,
   right: 0,
-  bottom: 12,
+  bottom: "max(12px, calc(env(safe-area-inset-bottom) + 4px))",
   zIndex: 999,
   display: "flex",
   justifyContent: "center",
