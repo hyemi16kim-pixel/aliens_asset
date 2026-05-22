@@ -89,26 +89,49 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const holding = await prisma.stockHolding.upsert({
-      where: {
-        accountId_code: {
-          accountId,
-          code,
-        },
-      },
-      update: {
-        name,
-        quantity,
-        avgPrice,
-      },
-      create: {
-        accountId,
-        name,
-        code,
-        quantity,
-        avgPrice,
-      },
+    // 계좌 정보 조회 (familyId, stockCash 필요)
+    const account = await prisma.account.findUnique({ where: { id: accountId } });
+    if (!account) {
+      return NextResponse.json({ error: "계좌를 찾을 수 없습니다." }, { status: 404 });
+    }
+
+    // 기존 보유 종목 확인 (추가분 계산용)
+    const existing = await prisma.stockHolding.findUnique({
+      where: { accountId_code: { accountId, code } },
     });
+    const prevAmount = existing ? existing.quantity * existing.avgPrice : 0;
+    const newAmount = quantity * avgPrice;
+    const cashDelta = newAmount - prevAmount; // 추가 매수 금액
+
+    const holding = await prisma.stockHolding.upsert({
+      where: { accountId_code: { accountId, code } },
+      update: { name, quantity, avgPrice },
+      create: { accountId, name, code, quantity, avgPrice },
+    });
+
+    // EXPENSE 트랜잭션 생성 + stockCash 차감 (recalc과 일관성 유지)
+    if (cashDelta > 0) {
+      await prisma.transaction.create({
+        data: {
+          familyId: account.familyId,
+          userId: null,
+          owner: body.owner || null,
+          type: "EXPENSE",
+          amount: cashDelta,
+          category: "주식 매수",
+          memo: `${name}(${code}) ${quantity}주`,
+          transactionAt: new Date(),
+          fromAccountId: accountId,
+          toAccountId: null,
+        },
+      });
+      // stockCash 직접 차감
+      const currentCash = Number(account.stockCash || 0);
+      await prisma.account.update({
+        where: { id: accountId },
+        data: { stockCash: Math.max(0, currentCash - cashDelta) },
+      });
+    }
 
     return NextResponse.json(holding);
   } catch (error: any) {
@@ -134,6 +157,12 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
+    // 수정 전 보유 금액 조회 (stockCash 조정을 위해)
+    const prevHolding = await prisma.stockHolding.findUnique({ where: { id } });
+    const prevAmount = prevHolding ? prevHolding.quantity * prevHolding.avgPrice : 0;
+    const newAmount = quantity * avgPrice;
+    const cashDelta = newAmount - prevAmount;
+
     const holding = await prisma.stockHolding.update({
       where: { id },
       data: {
@@ -141,6 +170,16 @@ export async function PATCH(req: NextRequest) {
         avgPrice,
       },
     });
+
+    // 변동분만큼 stockCash 조정
+    if (cashDelta !== 0 && prevHolding) {
+      const account = await prisma.account.findUnique({ where: { id: prevHolding.accountId } });
+      const currentCash = Number(account?.stockCash || 0);
+      await prisma.account.update({
+        where: { id: prevHolding.accountId },
+        data: { stockCash: Math.max(0, currentCash - cashDelta) },
+      });
+    }
 
     return NextResponse.json(holding);
   } catch (error: any) {

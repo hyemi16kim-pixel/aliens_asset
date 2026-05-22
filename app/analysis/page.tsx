@@ -6,7 +6,7 @@ import BottomNav from "@/components/navigation/BottomNav";
 import SpendingCategoryCard from "@/components/dashboard/SpendingCategoryCard";
 import { ChevronLeft } from "lucide-react";
 import { theme } from "@/components/lib/theme";
-import { getCurrentFamilyId, getCurrentFamilyCode } from "@/components/lib/familyCode";
+import { getCurrentFamilyId, getCurrentFamilyCode, getCurrentUserId } from "@/components/lib/familyCode";
 import AssetAccountGrid from "@/components/analysis/AssetAccountGrid";
 import StockHoldingList from "@/components/analysis/StockHoldingList";
 import { Suspense } from "react";
@@ -195,13 +195,14 @@ function AnalysisPageContent() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedPaletteAccount, setSelectedPaletteAccount] = useState<number | null>(null);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
-  const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
+  const [users, setUsers] = useState<{ id: number; name: string; role?: string }[]>([]);
   const [accountOwnerId, setAccountOwnerId] = useState("");
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [accountName, setAccountName] = useState("");
   const [accountType, setAccountType] = useState("BANK");
   
   const [accountBalance, setAccountBalance] = useState("");
+  const [stockCashInput, setStockCashInput] = useState("");
   const [nextPaymentDate, setNextPaymentDate] = useState("");
   const [nextPaymentAmount, setNextPaymentAmount] = useState("");
   const [nextMonthAmount, setNextMonthAmount] = useState("");
@@ -248,6 +249,18 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
     }
   };
   
+  // Hydration safe: localStorage 이름을 클라이언트 마운트 후 즉시 적용
+  useEffect(() => {
+    const myId = getCurrentUserId();
+    const myName = localStorage.getItem("alien_my_name") || "나";
+    const partnerName = localStorage.getItem("alien_partner_name") || "파트너";
+    // id를 알 수 없는 상태(-1/-2)로 임시 설정 — API 응답 후 실제 id로 교체됨
+    setUsers([
+      { id: myId > 0 ? myId : -1, name: myName },
+      { id: -2, name: partnerName },
+    ]);
+  }, []);
+
   useEffect(() => {
     fetch(`/api/transactions?familyId=${getCurrentFamilyId()}`)
       .then((res) => res.json())
@@ -260,16 +273,17 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
      fetch(`/api/profile?code=${encodeURIComponent(getCurrentFamilyCode())}`)
       .then((res) => res.json())
       .then((data) => {
+        // id 기반으로 이름 매핑 — 기기 사용자 전환과 무관하게 계좌 소유자를 정확히 표시
+        const myId = getCurrentUserId();
         const savedMyName = localStorage.getItem("alien_my_name") || "나";
-        const savedPartnerName =
-          localStorage.getItem("alien_partner_name") || "파트너";
-
+        const savedPartnerName = localStorage.getItem("alien_partner_name") || "파트너";
         const mappedUsers = (data.users || []).map((user: any) => {
-          if (user.role === "OWNER") return { ...user, name: savedMyName };
-          if (user.role === "MEMBER") return { ...user, name: savedPartnerName };
-          return user;
+          // DB에 기본값("나"/"파트너")이 남아있는 경우: user.id로 누가 "나"인지 판별
+          if (user.name === "나" || user.name === "파트너") {
+            return { ...user, name: user.id === myId ? savedMyName : savedPartnerName };
+          }
+          return { ...user }; // DB에 실제 이름이 있으면 그대로 사용
         });
-
         setUsers([...mappedUsers, { id: 0, name: "공동" }]);
 
   })
@@ -566,7 +580,8 @@ const getPercent = (owner: string) => {
       setAccountBalance("");
       setAccountOwnerId("");
       setShowAccountModal(true);
-      setCardPaymentDay("");
+      setStockCashInput("");
+    setCardPaymentDay("");
       setCardCycleStartDay("");
       setCardCycleEndDay("");
     }}
@@ -594,13 +609,18 @@ const getPercent = (owner: string) => {
 </div>
 
             <AssetAccountGrid
+              users={users.filter((u) => u.id > 0)}
               accounts={(() => {
-                const myName = users[0]?.name || "나";
-                const partnerName = users[1]?.name || "파트너";
-                if (assetOwnerFilter === myName)
-                  return accounts.filter((a) => a.owner?.name === myName || a.owner?.role === "OWNER");
-                if (assetOwnerFilter === partnerName)
-                  return accounts.filter((a) => a.owner?.name === partnerName || a.owner?.role === "MEMBER");
+                const user0 = users[0]; // OWNER
+                const user1 = users[1]; // MEMBER
+                if (assetOwnerFilter === user0?.name)
+                  return accounts.filter((a) =>
+                    user0?.id > 0 ? a.owner?.id === user0.id : a.owner?.role === "OWNER"
+                  );
+                if (assetOwnerFilter === user1?.name)
+                  return accounts.filter((a) =>
+                    user1?.id > 0 ? a.owner?.id === user1.id : a.owner?.role === "MEMBER"
+                  );
                 if (assetOwnerFilter === "공동")
                   return accounts.filter((a) => !a.owner || a.owner?.name === "공동");
                 return accounts; // 전체
@@ -614,9 +634,22 @@ const getPercent = (owner: string) => {
                 setCardCycleStartDay(account.cardCycleStartDay ? String(account.cardCycleStartDay) : "");
                 setCardCycleEndDay(account.cardCycleEndDay ? String(account.cardCycleEndDay) : "");
                 setAccountName(account.name);
-                setAccountSourceKey(account.sourceKey || "");
+                // 유저별 별칭 로드: AccountAlias에서 현재 유저의 별칭 우선, 없으면 account.sourceKey fallback
+                const myUid = getCurrentUserId();
+                if (myUid) {
+                  fetch(`/api/accounts/alias?userId=${myUid}`)
+                    .then((r) => r.json())
+                    .then((aliasRows: { accountId: number; alias: string }[]) => {
+                      const found = aliasRows.find((row) => row.accountId === account.id);
+                      setAccountSourceKey(found ? found.alias : (account.sourceKey || ""));
+                    })
+                    .catch(() => setAccountSourceKey(account.sourceKey || ""));
+                } else {
+                  setAccountSourceKey(account.sourceKey || "");
+                }
                 setAccountType(account.type);
                 setAccountBalance(String(account.balance));
+                setStockCashInput(account.type === "STOCK" ? String(account.stockCash ?? "") : "");
                 setAccountColor(account.color || "#F6F0FF");
                 setAccountOwnerId(account.ownerId ? String(account.ownerId) : "");
                 setShowAccountModal(true);
@@ -645,6 +678,39 @@ const getPercent = (owner: string) => {
                 ownerName={selectedStockAccount.owner?.name || "공동"}
                 onChanged={fetchAccounts}
               />
+            )}
+
+            {accounts.some((a) => a.type === "STOCK") && (
+              <div style={{ padding: "4px 2px" }}>
+                <button
+                  onClick={async () => {
+                    const familyId = getCurrentFamilyId();
+                    const preview = await fetch("/api/dev/recalc-stock-cash?familyId=" + familyId).then((r) => r.json());
+                    const msg = (preview.results || []).map((r: any) =>
+                      r.name + ": 현재 " + r.prevStockCash.toLocaleString() + "원 -> 재계산 " + r.newStockCash.toLocaleString() + "원 (유입 " + r.cashIn.toLocaleString() + " / 유출 " + r.cashOut.toLocaleString() + " / 거래 " + r.txCount + "건)"
+                    ).join(" | ");
+                    const ok = window.confirm("거래내역 기준 예수금 재계산 결과: " + msg + " 적용하시겠습니까?");
+                    if (!ok) return;
+                    const res = await fetch("/api/dev/recalc-stock-cash", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ familyId }),
+                    });
+                    const data = await res.json();
+                    if (!data.ok) { alert("재계산 실패: " + (data.error || "")); return; }
+                    alert("예수금이 재계산되었습니다.");
+                    fetchAccounts();
+                  }}
+                  style={{
+                    width: "100%", height: 44, borderRadius: 14,
+                    border: "1.5px dashed #C4B5FD",
+                    background: "transparent", color: "#7C5CFF",
+                    fontSize: 13, fontWeight: 800, cursor: "pointer",
+                  }}
+                >
+                  {"🔄 주식계좌 예수금 거래내역 기준 재계산"}
+                </button>
+              </div>
             )}
           </>
         )}
@@ -983,10 +1049,26 @@ const lastMonthExpenses = expenses.filter((tx) =>
       <input
         value={accountBalance}
         onChange={(e) => setAccountBalance(e.target.value)}
-        placeholder="현재 금액"
+        placeholder="현재 금액 (주식계좌는 자동계산)"
         type="number"
         style={inputStyle}
       />
+
+{accountType === "STOCK" && (
+  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    <div style={{ fontSize: 12, fontWeight: 800, color: "#7E73A8" }}>예수금 (직접 입력)</div>
+    <input
+      value={stockCashInput}
+      onChange={(e) => setStockCashInput(e.target.value)}
+      placeholder="예수금 잔액 (원)"
+      type="number"
+      style={inputStyle}
+    />
+    <div style={{ fontSize: 11, color: "#9B96AA", lineHeight: 1.5 }}>
+      거래내역의 수입/이체로 자동 반영되지 않은 금액이 있을 때 여기서 직접 수정하세요.
+    </div>
+  </div>
+)}
 
 {accountType === "CARD" && (
   <div style={cardSettingBoxStyle}>
@@ -1098,6 +1180,9 @@ const lastMonthExpenses = expenses.filter((tx) =>
 
     const method = editingAccount ? "PATCH" : "POST";
 
+    // sourceKey를 AccountAlias(per-user)에도 저장하기 위해 accountId를 나중에 받아 처리
+    const myUid = getCurrentUserId();
+
     const res = await fetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
@@ -1109,6 +1194,7 @@ const lastMonthExpenses = expenses.filter((tx) =>
         sourceKey: accountSourceKey || null,
         type: accountType,
         balance: Number(accountBalance || 0),
+        stockCash: accountType === "STOCK" && stockCashInput !== "" ? Number(stockCashInput) : undefined,
         color: accountColor,
         familyId: getCurrentFamilyId(),
        ownerId:
@@ -1132,6 +1218,26 @@ const lastMonthExpenses = expenses.filter((tx) =>
       alert(data?.error || "자산 저장 실패");
       return;
     }
+
+    // sourceKey를 AccountAlias(per-user)에도 저장 — 기기 사용자별로 SMS/카카오 매칭이 분리됨
+    const savedAccount = await res.json().catch(() => null);
+    const savedAccountId = savedAccount?.id ?? editingAccount?.id;
+    if (myUid && savedAccountId) {
+      if (accountSourceKey) {
+        // 별칭 저장 (upsert)
+        fetch("/api/accounts/alias", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accountId: savedAccountId, userId: myUid, alias: accountSourceKey }),
+        }).catch(console.error);
+      } else {
+        // 별칭 비어있으면 삭제
+        fetch(`/api/accounts/alias?accountId=${savedAccountId}&userId=${myUid}`, {
+          method: "DELETE",
+        }).catch(console.error);
+      }
+    }
+
     setCardPaymentDay("");
     setCardCycleStartDay("");
     setCardCycleEndDay("");

@@ -24,6 +24,7 @@ type Account = {
 
 type Props = {
   account: Account;
+  users?: { id: number; name: string; role?: string }[];
   onClick: () => void;
   onDoubleClick: () => void;
   onPalette: () => void;
@@ -52,9 +53,10 @@ const paletteColorMap: Record<string, string> = {
   "#A78BFA": "#6D28D9",
 };
 
-export default function AssetAccountCard({ account, onClick, onDoubleClick, onPalette, onDetail }: Props) {
+export default function AssetAccountCard({ account, users = [], onClick, onDoubleClick, onPalette, onDetail }: Props) {
   const iconColor = paletteColorMap[account.color || "#F6F0FF"] || "#7C5CFF";
 
+  const [stockLoading, setStockLoading] = useState(account.type === "STOCK");
   const [stockSummary, setStockSummary] = useState<{
     stockCash: number;
     currentStockValue: number;
@@ -67,6 +69,7 @@ export default function AssetAccountCard({ account, onClick, onDoubleClick, onPa
 
   useEffect(() => {
     if (account.type !== "STOCK") return;
+    setStockLoading(true);
     fetch(`/api/stocks/summary?accountId=${account.id}`)
       .then((res) => res.json())
       .then((data) => {
@@ -80,11 +83,30 @@ export default function AssetAccountCard({ account, onClick, onDoubleClick, onPa
           profitRate: Number(data.profitRate || 0),
         });
       })
-      .catch(console.error);
+      .catch(() => {
+        // API 실패 시 stockCash만이라도 표시
+        setStockSummary({
+          stockCash: Number(account.stockCash || 0),
+          currentStockValue: 0,
+          totalValue: Number(account.stockCash || 0),
+          totalDividend: 0,
+          purchaseCost: 0,
+          profitAmount: 0,
+          profitRate: 0,
+        });
+      })
+      .finally(() => setStockLoading(false));
   }, [account.id, account.type, account.balance, account.stockCash]);
 
-  const myName = typeof window !== "undefined" ? localStorage.getItem("alien_my_name") || "나" : "나";
-  const partnerName = typeof window !== "undefined" ? localStorage.getItem("alien_partner_name") || "파트너" : "파트너";
+  // 소유자 이름: owner.id 기준 조회 (기기 사용자 교체에 무관)
+  const ownerName = (() => {
+    if (!account.owner) return "공동";
+    if (account.owner.id && users.length > 0) {
+      const found = users.find((u) => u.id === account.owner!.id);
+      if (found) return found.name;
+    }
+    return account.owner.name || "공동";
+  })();
 
   const getRemainingPeriod = (date?: string | null) => {
     if (!date) return "-";
@@ -100,10 +122,6 @@ export default function AssetAccountCard({ account, onClick, onDoubleClick, onPa
     return `${totalMonths}개월 ${days}일`;
   };
 
-  const ownerName =
-    account.owner?.name === "나" ? myName
-    : account.owner?.name === "파트너" ? partnerName
-    : account.owner?.name || "공동";
 
   return (
     <div
@@ -140,7 +158,7 @@ export default function AssetAccountCard({ account, onClick, onDoubleClick, onPa
       {/* 메인 금액 */}
       <div style={{ marginTop: 12, fontSize: 18, fontWeight: 800 }}>
         {account.type === "STOCK"
-          ? money(stockSummary?.totalValue || 0)
+          ? (stockLoading ? "로딩 중..." : money(stockSummary?.totalValue || 0))
           : account.type === "CARD"
           ? money(-(account.nextPaymentAmount || 0))
           : account.type === "LOAN"

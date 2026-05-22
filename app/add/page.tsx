@@ -40,6 +40,17 @@ import {
   PiggyBank,
   ArrowDownCircle,
   CreditCard,
+  TrendingUp,
+  Zap,
+  Coins,
+  Pencil,
+  HandCoins,
+  Trophy,
+  Banknote,
+  Store,
+  Building2,
+  RefreshCw,
+  ShoppingCart,
 } from "lucide-react";
 
 type TransactionType = "EXPENSE" | "INCOME" | "TRANSFER" | "STOCK";
@@ -127,6 +138,44 @@ const customIconMap = {
   ],
 };
 
+// 프로필 페이지에서 저장한 영어 아이콘 키 → Lucide 컴포넌트 매핑
+const englishIconMap: Record<string, React.ElementType> = {
+  home: Home,
+  utensils: Utensils,
+  coffee: Coffee,
+  shopping: ShoppingBag,
+  bus: Bus,
+  heart: Heart,
+  gamepad: Gamepad2,
+  film: Film,
+  gift: Gift,
+  hospital: Hospital,
+  book: BookOpen,
+  dumbbell: Dumbbell,
+  plane: Plane,
+  shirt: Shirt,
+  phone: Smartphone,
+  paw: PawPrint,
+  baby: Baby,
+  music: Music,
+  briefcase: Briefcase,
+  building: Building2,
+  trending: TrendingUp,
+  card: CreditCard,
+  refresh: RefreshCw,
+  zap: Zap,
+  coins: Coins,
+  pencil: Pencil,
+  handcoins: HandCoins,
+  trophy: Trophy,
+  banknote: Banknote,
+  store: Store,
+  wallet: Wallet,
+  landmark: Landmark,
+  piggybank: PiggyBank,
+  shoppingcart: ShoppingCart,
+};
+
 export default function AddTransactionPage() {
   const router = useRouter();
 
@@ -155,7 +204,8 @@ export default function AddTransactionPage() {
   const [selectedImportId, setSelectedImportId] = useState<string>("");
   const [hiddenImportIds, setHiddenImportIds] = useState<string[]>([]);
 
-  const [stockTradeType, setStockTradeType] = useState<"BUY" | "SELL">("BUY");
+  const [stockTradeType, setStockTradeType] = useState<"BUY" | "SELL" | "DIVIDEND">("BUY");
+  const [dividendAmount, setDividendAmount] = useState("");
   const [stockAccountId, setStockAccountId] = useState("");
   const [stockName, setStockName] = useState("");
   const [stockCode, setStockCode] = useState("");
@@ -167,7 +217,7 @@ export default function AddTransactionPage() {
 
   const [favoriteCategories, setFavoriteCategories] = useState<string[]>([]);
   const [customCategories, setCustomCategories] = useState<
-    { id?: number; name: string; iconKey: string }[]
+    { id?: number; name: string; iconKey: string; emoji?: string }[]
   >([]);
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -237,18 +287,22 @@ const parseImportedMessage = (item: ImportedMessage) => {
 
   const activeColor = typeColorMap[type];
   const activeSoftColor = typeSoftColorMap[type];
-  const customIconList = customIconMap[type];
+  // 모든 타입의 아이콘을 합쳐서 검색 (타입 무관하게 이름으로 매핑)
+  const allIconItems = Object.values(customIconMap).flat();
   const defaultCategories = categoryMap[type];
 
   
   const customMappedCategories = customCategories.map((item) => {
-    const foundIcon =
-      customIconList.find((iconItem) => iconItem.key === item.iconKey)?.icon ||
-      Home;
-
+    // 1차: 한글 카테고리명으로 아이콘 검색
+    let foundIcon: React.ElementType | null = allIconItems.find((iconItem) => iconItem.key === item.iconKey)?.icon || null;
+    // 2차: DB에 저장된 영어 아이콘 키로 검색 (프로필 페이지 방식)
+    if (!foundIcon && item.emoji) {
+      foundIcon = englishIconMap[item.emoji] || null;
+    }
     return {
       name: item.name,
-      icon: foundIcon,
+      icon: foundIcon,   // null이면 👽 fallback
+      emoji: item.emoji || "👽",
     };
   });
 
@@ -300,10 +354,12 @@ const parseImportedMessage = (item: ImportedMessage) => {
         cacheProfileSettings(meName, partnerName, meColor, partnerColorVal);
       })
       .catch(() => {});
+    const _uid = getCurrentUserId();
+    const _favAccKey = `alien_favorite_account_ids_${_uid || 0}`;
     setFavoriteAccountIds(
-      JSON.parse(localStorage.getItem("alien_favorite_account_ids") || "[]")
+      JSON.parse(localStorage.getItem(_favAccKey) || "[]")
     );
-    fetch(`/api/accounts/simple?familyId=${getCurrentFamilyId()}`)
+    fetch(`/api/accounts/simple?familyId=${getCurrentFamilyId()}&userId=${getCurrentUserId()}`)
       .then((res) => res.json())
       .then((data) => {
         const accountList = Array.isArray(data) ? data : data.accounts || [];
@@ -370,7 +426,8 @@ const parseImportedMessage = (item: ImportedMessage) => {
           const serverCategories = data.map(cat => ({
             id: cat.id,
             name: cat.name,
-            iconKey: cat.name // 아이콘 키는 이름과 동일하게 설정 (기본값)
+            iconKey: cat.name, // 이름으로 lucide 아이콘 검색 시도
+            emoji: cat.icon || "👽",  // DB 저장 이모지 (fallback용)
           }));
 
           // 기본 카테고리 제외한 커스텀 카테고리만 설정
@@ -389,10 +446,10 @@ const parseImportedMessage = (item: ImportedMessage) => {
           }
         }
         
-        // 즐겨찾기는 여전히 로컬에 저장
-        const savedFavorites = localStorage.getItem(
-          `alien_favorite_categories_${type}`
-        );
+        // 즐겨찾기는 사용자별로 로컬에 저장
+        const _catUid = getCurrentUserId();
+        const _catFavKey = `alien_favorite_categories_${type}_${_catUid || 0}`;
+        const savedFavorites = localStorage.getItem(_catFavKey);
 
         const fallback =
           type === "EXPENSE"
@@ -406,9 +463,9 @@ const parseImportedMessage = (item: ImportedMessage) => {
         console.error("카테고리 로드 오류:", error);
         
         
-        const savedFavorites = localStorage.getItem(
-          `alien_favorite_categories_${type}`
-        );
+        const _catUid2 = getCurrentUserId();
+        const _catFavKey2 = `alien_favorite_categories_${type}_${_catUid2 || 0}`;
+        const savedFavorites = localStorage.getItem(_catFavKey2);
 
         const fallback =
           type === "EXPENSE"
@@ -432,7 +489,8 @@ const parseImportedMessage = (item: ImportedMessage) => {
       : [...favoriteAccountIds, accountId];
 
     setFavoriteAccountIds(next);
-    localStorage.setItem("alien_favorite_account_ids", JSON.stringify(next));
+    const _uid2 = getCurrentUserId();
+    localStorage.setItem(`alien_favorite_account_ids_${_uid2 || 0}`, JSON.stringify(next));
   };
 
   const sortAccountsByFavorite = (list: Account[]) => {
@@ -445,7 +503,10 @@ const parseImportedMessage = (item: ImportedMessage) => {
 
   const changeType = (nextType: TransactionType) => {
     setType(nextType);
-    setCategory(""); // 기본 카테고리가 없으므로 빈 값으로 설정
+    setCategory("");
+    // 타입 전환 시 계좌 선택 초기화 (혼선 방지)
+    setFromAccountId("");
+    setToAccountId("");
 
     if (nextType === "STOCK") {
       const stockAccount = accounts.find((account) => account.type === "STOCK");
@@ -459,8 +520,9 @@ const parseImportedMessage = (item: ImportedMessage) => {
       : [...favoriteCategories, name];
 
     setFavoriteCategories(next);
+    const _catUid3 = getCurrentUserId();
     localStorage.setItem(
-      `alien_favorite_categories_${type}`,
+      `alien_favorite_categories_${type}_${_catUid3 || 0}`,
       JSON.stringify(next)
     );
   };
@@ -505,6 +567,7 @@ const parseImportedMessage = (item: ImportedMessage) => {
               id: item.id,
               name: item.name,
               iconKey: item.iconKey || item.name,
+              emoji: item.icon || "👽",
             }))
           : []
       );
@@ -755,6 +818,44 @@ console.log("MATCH_DEBUG", {
       return;
     }
       if (type === "STOCK") {
+      // 배당금 입금 처리
+      if (stockTradeType === "DIVIDEND") {
+        if (!stockAccountId || !dividendAmount) {
+          alert("증권 계좌와 배당금 금액을 입력하세요.");
+          return;
+        }
+        try {
+          setIsSaving(true);
+          const res = await fetch("/api/transactions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              familyId: getCurrentFamilyId(),
+              userId: getCurrentUserId() || undefined,
+              type: "INCOME",
+              amount: Number(dividendAmount),
+              category: "배당금",
+              owner,
+              memo: stockName ? `${stockName} 배당금` : "배당금",
+              transactionAt: new Date(date).toISOString(),
+              toAccountId: Number(stockAccountId),
+            }),
+          });
+          const data = await res.json().catch(() => null);
+          if (!res.ok) {
+            alert(data?.error || "배당금 저장 실패");
+            return;
+          }
+          router.push("/transactions");
+        } catch (err) {
+          console.error(err);
+          alert("배당금 저장 실패");
+        } finally {
+          setIsSaving(false);
+        }
+        return;
+      }
+
       if (!stockAccountId || !stockName || !stockCode || !stockQuantity || !stockPrice) {
     alert("주식 거래 정보를 모두 입력하세요.");
     return;
@@ -808,7 +909,7 @@ console.log("MATCH_DEBUG", {
         },
         body: JSON.stringify({
           familyId: getCurrentFamilyId(),
-          userId: 1,
+          userId: getCurrentUserId() || undefined,
           type,
           amount: Number(amount),
           category,
@@ -1126,7 +1227,7 @@ console.log("MATCH_DEBUG", {
                 </div>
               )}
               {sortedCategories.map((item) => {
-                const Icon = item.icon;
+                const Icon = item.icon as React.ElementType | null;
                 const active = category === item.name;
                 const favorite = favoriteCategories.includes(item.name);
 
@@ -1163,10 +1264,12 @@ console.log("MATCH_DEBUG", {
                       position: "relative",
                     }}
                   >
-                    <Icon
-                      size={15}
-                      color={active ? activeColor : theme.colors.subtext}
-                    />
+                    {Icon
+                      ? <Icon size={15} color={active ? activeColor : theme.colors.subtext} />
+                      : <span style={{ fontSize: 15 }}>
+                          {/^[a-zA-Z]/.test((item as any).emoji || "") ? "👽" : ((item as any).emoji || "👽")}
+                        </span>
+                    }
                     <span>{item.name}</span>
 
                     <span
@@ -1264,8 +1367,8 @@ console.log("MATCH_DEBUG", {
             />
 
             <div style={iconListStyle}>
-              {customIconList.map((item) => {
-                const Icon = item.icon;
+              {allIconItems.map((item) => {
+                const Icon = item.icon as React.ElementType;
                 const active = newCategoryIconKey === item.key;
 
                 return (
@@ -1315,11 +1418,12 @@ console.log("MATCH_DEBUG", {
 {type === "STOCK" ? (
   <section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
-    {/* 매수 / 매도 토글 */}
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+    {/* 매수 / 매도 / 배당금 토글 */}
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
       {([
-        { key: "BUY",  label: "📈 매수", color: "#4CD6A5" },
-        { key: "SELL", label: "📉 매도", color: "#FF6B81" },
+        { key: "BUY",      label: "📈 매수",  color: "#4CD6A5" },
+        { key: "SELL",     label: "📉 매도",  color: "#FF6B81" },
+        { key: "DIVIDEND", label: "💰 배당금", color: "#F59E0B" },
       ] as const).map(({ key, label, color }) => (
         <button
           key={key}
@@ -1332,7 +1436,7 @@ console.log("MATCH_DEBUG", {
               ? `linear-gradient(135deg, ${color}20 0%, ${color}08 100%)`
               : "rgba(255,255,255,0.6)",
             color: stockTradeType === key ? color : theme.colors.subtext,
-            fontWeight: 900, fontSize: 15,
+            fontWeight: 900, fontSize: 13,
             cursor: "pointer",
           }}
         >{label}</button>
@@ -1351,77 +1455,42 @@ console.log("MATCH_DEBUG", {
       />
     </div>
 
-    {/* 종목 선택 */}
-    <div style={{
-      height: 52, borderRadius: 18,
-      border: `1px solid ${activeColor}28`,
-      display: "grid", gridTemplateColumns: "auto 1fr",
-      alignItems: "center", padding: "0 14px", gap: 8,
-      background: "rgba(255,255,255,0.75)",
-    }}>
-      <span style={{ fontSize: 12, fontWeight: 900, color: `${activeColor}99`, whiteSpace: "nowrap" }}>종목</span>
-      <select
-        value={stockMode === "NEW" ? "__NEW__" : selectedStockId}
-        onChange={(e) => {
-          const value = e.target.value;
-          if (value === "__NEW__") {
-            setStockMode("NEW");
-            setSelectedStockId("");
-            setStockName("");
-            setStockCode("");
-            return;
-          }
-          setStockMode("EXISTING");
-          setSelectedStockId(value);
-          const selected = stockHoldings.find((item) => String(item.id) === value);
-          if (selected) { setStockName(selected.name); setStockCode(selected.code); }
-        }}
-        style={{ ...accountSelectStyle, color: theme.colors.text }}
-      >
-        <option value="">보유종목 선택</option>
-        {stockHoldings.map((item) => (
-          <option key={item.id} value={item.id}>{item.name}({item.code})</option>
-        ))}
-        <option value="__NEW__">+ 신규 종목 추가</option>
-      </select>
-    </div>
+    {/* 배당금 폼 */}
+    {stockTradeType === "DIVIDEND" ? (
+      <>
+        {/* 배당금: 종목명(메모용, 선택) */}
+        <div style={{
+          height: 52, borderRadius: 18,
+          border: `1px solid ${activeColor}28`,
+          display: "grid", gridTemplateColumns: "auto 1fr",
+          alignItems: "center", padding: "0 14px", gap: 8,
+          background: "rgba(255,255,255,0.75)",
+        }}>
+          <span style={{ fontSize: 12, fontWeight: 900, color: `${activeColor}99`, whiteSpace: "nowrap" }}>종목</span>
+          <select
+            value={selectedStockId}
+            onChange={(e) => {
+              const value = e.target.value;
+              setSelectedStockId(value);
+              const selected = stockHoldings.find((item) => String(item.id) === value);
+              if (selected) setStockName(selected.name);
+              else setStockName("");
+            }}
+            style={{ ...accountSelectStyle, color: theme.colors.text }}
+          >
+            <option value="">종목 선택 (선택사항)</option>
+            <option value="__COMMON__">공통</option>
+            {stockHoldings.map((item) => (
+              <option key={item.id} value={item.id}>{item.name}({item.code})</option>
+            ))}
+          </select>
+        </div>
 
-    {stockMode === "NEW" && (
-      <div style={{ display: "grid", gap: 8 }}>
+        {/* 배당금 금액 */}
         <input
-          value={stockName}
-          onChange={(e) => setStockName(e.target.value)}
-          placeholder="종목명 예: 삼성전자"
-          style={{
-            ...categoryNameInputStyle,
-            border: `1px solid ${activeColor}28`,
-            background: "rgba(255,255,255,0.75)",
-          }}
-        />
-        <input
-          value={stockCode}
-          onChange={(e) => setStockCode(e.target.value)}
-          placeholder="종목코드 예: 005930"
-          style={{
-            ...categoryNameInputStyle,
-            border: `1px solid ${activeColor}28`,
-            background: "rgba(255,255,255,0.75)",
-          }}
-        />
-      </div>
-    )}
-
-    {/* 수량 / 단가 */}
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-      {[
-        { value: stockQuantity, setter: setStockQuantity, placeholder: "수량" },
-        { value: stockPrice,    setter: setStockPrice,    placeholder: "단가" },
-      ].map(({ value, setter, placeholder }) => (
-        <input
-          key={placeholder}
-          value={value}
-          onChange={(e) => setter(e.target.value)}
-          placeholder={placeholder}
+          value={dividendAmount}
+          onChange={(e) => setDividendAmount(e.target.value)}
+          placeholder="배당금 금액 (원)"
           type="number"
           style={{
             ...categoryNameInputStyle,
@@ -1429,8 +1498,99 @@ console.log("MATCH_DEBUG", {
             background: "rgba(255,255,255,0.75)",
           }}
         />
-      ))}
-    </div>
+
+        {/* 안내 텍스트 */}
+        <div style={{
+          fontSize: 11, color: theme.colors.subtext,
+          padding: "6px 4px", lineHeight: 1.6,
+        }}>
+          💰 배당금은 <strong>예수금으로 입금</strong>되며 <strong>수익률에 포함</strong>됩니다.
+        </div>
+      </>
+    ) : (
+      <>
+        {/* 종목 선택 */}
+        <div style={{
+          height: 52, borderRadius: 18,
+          border: `1px solid ${activeColor}28`,
+          display: "grid", gridTemplateColumns: "auto 1fr",
+          alignItems: "center", padding: "0 14px", gap: 8,
+          background: "rgba(255,255,255,0.75)",
+        }}>
+          <span style={{ fontSize: 12, fontWeight: 900, color: `${activeColor}99`, whiteSpace: "nowrap" }}>종목</span>
+          <select
+            value={stockMode === "NEW" ? "__NEW__" : selectedStockId}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === "__NEW__") {
+                setStockMode("NEW");
+                setSelectedStockId("");
+                setStockName("");
+                setStockCode("");
+                return;
+              }
+              setStockMode("EXISTING");
+              setSelectedStockId(value);
+              const selected = stockHoldings.find((item) => String(item.id) === value);
+              if (selected) { setStockName(selected.name); setStockCode(selected.code); }
+            }}
+            style={{ ...accountSelectStyle, color: theme.colors.text }}
+          >
+            <option value="">보유종목 선택</option>
+            {stockHoldings.map((item) => (
+              <option key={item.id} value={item.id}>{item.name}({item.code})</option>
+            ))}
+            <option value="__NEW__">+ 신규 종목 추가</option>
+          </select>
+        </div>
+
+        {stockMode === "NEW" && (
+          <div style={{ display: "grid", gap: 8 }}>
+            <input
+              value={stockName}
+              onChange={(e) => setStockName(e.target.value)}
+              placeholder="종목명 예: 삼성전자"
+              style={{
+                ...categoryNameInputStyle,
+                border: `1px solid ${activeColor}28`,
+                background: "rgba(255,255,255,0.75)",
+              }}
+            />
+            <input
+              value={stockCode}
+              onChange={(e) => setStockCode(e.target.value)}
+              placeholder="종목코드 예: 005930"
+              style={{
+                ...categoryNameInputStyle,
+                border: `1px solid ${activeColor}28`,
+                background: "rgba(255,255,255,0.75)",
+              }}
+            />
+          </div>
+        )}
+
+        {/* 수량 / 단가 */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          {[
+            { value: stockQuantity, setter: setStockQuantity, placeholder: "수량" },
+            { value: stockPrice,    setter: setStockPrice,    placeholder: "단가" },
+          ].map(({ value, setter, placeholder }) => (
+            <input
+              key={placeholder}
+              value={value}
+              onChange={(e) => setter(e.target.value)}
+              placeholder={placeholder}
+              type="number"
+              style={{
+                ...categoryNameInputStyle,
+                border: `1px solid ${activeColor}28`,
+                background: "rgba(255,255,255,0.75)",
+              }}
+            />
+          ))}
+        </div>
+      </>
+    )}
   </section>
 ) : (
   <section>
@@ -1479,9 +1639,17 @@ console.log("MATCH_DEBUG", {
     ) : (
       <AccountSelect
         label={type === "INCOME" ? "입금" : "출금"}
-        value={fromAccountId}
+        value={type === "INCOME" ? toAccountId : fromAccountId}
         accounts={filteredAccounts}
-        onChange={setFromAccountId}
+        onChange={(val) => {
+          if (type === "INCOME") {
+            setToAccountId(val);
+            setFromAccountId("");
+          } else {
+            setFromAccountId(val);
+            setToAccountId("");
+          }
+        }}
         activeColor={activeColor}
       />
     )}
@@ -1623,9 +1791,9 @@ function AccountSelect({
   const sharedAccounts = accounts.filter((a) => !a.owner);
   const [favoriteAccountIds, setFavoriteAccountIds] = useState<string[]>(() => {
   if (typeof window === "undefined") return [];
-
+  const _uid = getCurrentUserId();
   return JSON.parse(
-    localStorage.getItem("alien_favorite_account_ids") || "[]"
+    localStorage.getItem(`alien_favorite_account_ids_${_uid || 0}`) || "[]"
   );
 });
 
@@ -1635,9 +1803,9 @@ const toggleFavoriteAccount = (accountId: string) => {
     : [...favoriteAccountIds, accountId];
 
   setFavoriteAccountIds(next);
-
+  const _uid = getCurrentUserId();
   localStorage.setItem(
-    "alien_favorite_account_ids",
+    `alien_favorite_account_ids_${_uid || 0}`,
     JSON.stringify(next)
   );
 };

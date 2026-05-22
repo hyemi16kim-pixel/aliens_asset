@@ -111,14 +111,31 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "계좌 ID 필요" }, { status: 400 });
     }
 
+    const updateData: any = {
+      name: body.name,
+      type: body.type,
+      balance: Number(body.balance || 0),
+      memo: body.memo || null,
+    };
+
+    // STOCK 계좌: 예수금 직접 수정 지원
+    if (body.type === "STOCK" && body.stockCash !== undefined) {
+      updateData.stockCash = Number(body.stockCash);
+    }
+    // 계좌별 추가 필드
+    if (body.cardPaymentDay !== undefined) updateData.cardPaymentDay = body.cardPaymentDay ? Number(body.cardPaymentDay) : null;
+    if (body.cardCycleStartDay !== undefined) updateData.cardCycleStartDay = body.cardCycleStartDay ? Number(body.cardCycleStartDay) : null;
+    if (body.cardCycleEndDay !== undefined) updateData.cardCycleEndDay = body.cardCycleEndDay ? Number(body.cardCycleEndDay) : null;
+    if (body.maturityDate !== undefined) updateData.maturityDate = body.maturityDate ? new Date(body.maturityDate) : null;
+    if (body.monthlyPayment !== undefined) updateData.monthlyPayment = body.monthlyPayment ? Number(body.monthlyPayment) : null;
+    if (body.color !== undefined) updateData.color = body.color;
+    if (body.ownerId !== undefined) updateData.ownerId = body.ownerId ?? null;
+    if (body.displayOrder !== undefined) updateData.displayOrder = Number(body.displayOrder);
+
     const account = await prisma.account.update({
       where: { id: Number(body.id) },
-      data: {
-        name: body.name,
-        type: body.type,
-        balance: Number(body.balance || 0),
-        memo: body.memo || null,
-      },
+      data: updateData,
+      include: { owner: true },
     });
 
     return NextResponse.json(account);

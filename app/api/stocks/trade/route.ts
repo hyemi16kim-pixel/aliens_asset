@@ -1,6 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/components/lib/prisma";
 
+// balance + stockCash 일관 갱신 헬퍼
+async function applyStockBalance(
+  accountId: number,
+  amount: number,
+  direction: "decrement" | "increment"
+) {
+  if (direction === "decrement") {
+    await prisma.account.update({
+      where: { id: accountId },
+      data: {
+        balance: { decrement: amount },
+        stockCash: { decrement: amount },
+      },
+    });
+  } else {
+    await prisma.account.update({
+      where: { id: accountId },
+      data: {
+        balance: { increment: amount },
+        stockCash: { increment: amount },
+      },
+    });
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -36,6 +61,10 @@ export async function POST(req: NextRequest) {
 
     const tradeAmount = quantity * price;
     const currentStockCash = Number(account.stockCash || 0);
+    const currentBalance = Number(account.balance || 0);
+    // 예수금(stockCash)을 기준으로 체크
+    // stockCash가 음수인 경우(배당금 미입력 등)에도 balance를 fallback으로 사용
+    const effectiveAvailable = currentStockCash !== 0 ? currentStockCash : currentBalance;
 
     const before = await prisma.stockHolding.findUnique({
       where: {
@@ -47,9 +76,11 @@ export async function POST(req: NextRequest) {
     });
 
     if (tradeType === "BUY") {
-      if (currentStockCash < tradeAmount) {
+      if (effectiveAvailable < tradeAmount) {
         return NextResponse.json(
-          { error: "예수금이 부족합니다." },
+          {
+            error: `예수금이 부족합니다. (예수금 ${currentStockCash.toLocaleString()}원, 잔액 ${currentBalance.toLocaleString()}원)`,
+          },
           { status: 400 }
         );
       }
@@ -81,12 +112,8 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      await prisma.account.update({
-        where: { id: accountId },
-        data: {
-          stockCash: currentStockCash - tradeAmount,
-        },
-      });
+      // balance + stockCash 동시 차감 (applyBalance 역할)
+      await applyStockBalance(accountId, tradeAmount, "decrement");
     }
 
     if (tradeType === "SELL") {
@@ -110,12 +137,8 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      await prisma.account.update({
-        where: { id: accountId },
-        data: {
-          stockCash: currentStockCash + tradeAmount,
-        },
-      });
+      // balance + stockCash 동시 증가 (매도 대금)
+      await applyStockBalance(accountId, tradeAmount, "increment");
     }
 
     const familyId = Number(body.familyId || account.familyId || 1);
@@ -126,7 +149,7 @@ export async function POST(req: NextRequest) {
         familyId,
         userId,
         owner,
-        type: tradeType === "BUY" ? "EXPENSE" : "INCOME",
+        type: "TRANSFER",
         amount: tradeAmount,
         category: tradeType === "BUY" ? "주식 매수" : "주식 매도",
         memo: `${name}(${code}) ${quantity}주`,

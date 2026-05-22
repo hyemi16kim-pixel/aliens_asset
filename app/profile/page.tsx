@@ -308,20 +308,20 @@ export default function ProfilePage() {
                   }
                   const settings = await settingsRes.json();
 
-                  const meIsOwner = !myUserId || settings.owner?.id === myUserId;
-
+                  // ownerName/partnerName은 FamilySheet에서 이미 절대 역할 기준으로 전달됨
+                  // → 스왑 없이 그대로 저장
                   const patchRes = await fetch("/api/family-settings", {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                       familyId,
                       familyName,
-                      ownerId:     meIsOwner ? settings.owner?.id    : settings.partner?.id,
-                      ownerName:   meIsOwner ? myName                : partnerName,
-                      ownerColor:  meIsOwner ? myColorVal            : partnerColorVal,
-                      partnerId:   meIsOwner ? settings.partner?.id  : settings.owner?.id,
-                      partnerName: meIsOwner ? partnerName           : myName,
-                      partnerColor:meIsOwner ? partnerColorVal       : myColorVal,
+                      ownerId:     settings.owner?.id,
+                      ownerName:   myName,       // 절대 owner 이름
+                      ownerColor:  myColorVal,   // 절대 owner 색상
+                      partnerId:   settings.partner?.id,
+                      partnerName: partnerName,  // 절대 partner 이름
+                      partnerColor:partnerColorVal,
                     }),
                   });
 
@@ -331,14 +331,22 @@ export default function ProfilePage() {
                     return;
                   }
 
-                  // 로컬 상태 업데이트
+                  // 로컬 상태 업데이트 (perspective-relative: 현재 기기 사용자 기준)
+                  const myUidNow = getCurrentUserId();
+                  const amOwner = !myUidNow || settings.owner?.id === myUidNow;
                   setFamilyNameSetting(familyName);
-                  setMyNameSetting(myName);
-                  setPartnerNameSetting(partnerName);
-                  setMyColor(myColorVal);
-                  setPartnerColor(partnerColorVal);
-                  // localStorage 캐시도 동기화
-                  cacheProfileSettings(myName, partnerName, myColorVal, partnerColorVal);
+                  // myName(owner) / partnerName(partner) → 기기 관점으로 변환
+                  setMyNameSetting(amOwner ? myName : partnerName);
+                  setPartnerNameSetting(amOwner ? partnerName : myName);
+                  setMyColor(amOwner ? myColorVal : partnerColorVal);
+                  setPartnerColor(amOwner ? partnerColorVal : myColorVal);
+                  // localStorage 캐시도 올바른 관점으로 동기화
+                  cacheProfileSettings(
+                    amOwner ? myName : partnerName,
+                    amOwner ? partnerName : myName,
+                    amOwner ? myColorVal : partnerColorVal,
+                    amOwner ? partnerColorVal : myColorVal,
+                  );
 
                   alert("저장되었습니다.");
                   setActiveMenu(null);
@@ -350,8 +358,7 @@ export default function ProfilePage() {
                 setCurrentFamily(entry.code, entry.id, entry.name);
                 refreshFamilyCodeState();
                 setActiveMenu(null);
-                // 코드 전환 후 이 기기의 사용자(나/파트너)를 다시 선택
-                router.replace("/setup?step=user");
+                router.replace("/");
               }}
               onFamilyCodeAdd={async (newCode) => {
                 const trimmed = newCode.trim().toUpperCase();
@@ -362,8 +369,7 @@ export default function ProfilePage() {
                 setCurrentFamily(trimmed, data.family.id, data.family.code);
                 refreshFamilyCodeState();
                 setActiveMenu(null);
-                // 새 코드 연결 후 이 기기의 사용자(나/파트너)를 선택
-                router.replace("/setup?step=user");
+                router.replace("/");
               }}
               ownerUser={ownerUser}
               partnerUser={partnerUser}
@@ -529,16 +535,28 @@ function FamilySheet({
   onSwitchUser?: (user: { id: number; name: string; color?: string }) => void;
 }) {
   const [familyName, setFamilyName] = useState(familyNameSetting);
-  const [myName, setMyName] = useState(myNameSetting);
-  const [partnerName, setPartnerName] = useState(partnerNameSetting);
+
+  // 절대 역할 기준 이름 계산: 기기 사용자와 무관하게 owner/partner 고정
+  const amIOwner = !myUserId || myUserId === ownerUser?.id;
+  const [ownerNameInput, setOwnerNameInput] = useState(amIOwner ? myNameSetting : partnerNameSetting);
+  const [partnerNameInput, setPartnerNameInput] = useState(amIOwner ? partnerNameSetting : myNameSetting);
   const [colorPickerOpen, setColorPickerOpen] = useState<
-    "me" | "partner" | null
+    "owner" | "partner" | null
   >(null);
 
-  // API 로드 후 props가 바뀌면 내부 state 동기화
+  // API 로드 후 props가 바뀌면 절대 기준으로 동기화
   useEffect(() => { setFamilyName(familyNameSetting); }, [familyNameSetting]);
-  useEffect(() => { setMyName(myNameSetting); }, [myNameSetting]);
-  useEffect(() => { setPartnerName(partnerNameSetting); }, [partnerNameSetting]);
+  useEffect(() => {
+    const isOwner = !myUserId || myUserId === ownerUser?.id;
+    setOwnerNameInput(isOwner ? myNameSetting : partnerNameSetting);
+    setPartnerNameInput(isOwner ? partnerNameSetting : myNameSetting);
+  }, [myNameSetting, partnerNameSetting, myUserId, ownerUser]);
+
+  // 절대 역할 기준 색상
+  const ownerColorAbs = amIOwner ? myColor : partnerColor;
+  const partnerColorAbs = amIOwner ? partnerColor : myColor;
+  const setOwnerColorAbs = (c: string) => { amIOwner ? setMyColor(c) : setPartnerColor(c); };
+  const setPartnerColorAbs = (c: string) => { amIOwner ? setPartnerColor(c) : setMyColor(c); };
 
   const users = [ownerUser, partnerUser].filter(Boolean) as { id: number; name: string; color?: string }[];
 
@@ -610,28 +628,28 @@ function FamilySheet({
         style={sheetInputStyle}
       />
 
-      <label style={sheetLabelStyle}>내 이름</label>
+      <label style={sheetLabelStyle}>가족 대표 이름</label>
       <div style={nameColorRowStyle}>
         <input
-          value={myName}
-          onChange={(e) => setMyName(e.target.value)}
-          placeholder="내 이름 입력"
+          value={ownerNameInput}
+          onChange={(e) => setOwnerNameInput(e.target.value)}
+          placeholder="가족 대표 이름 입력"
           style={sheetInputStyle}
         />
 
         <button
-          onClick={() => setColorPickerOpen(colorPickerOpen === "me" ? null : "me")}
-          style={{ ...paletteButtonStyle, color: myColor }}
+          onClick={() => setColorPickerOpen(colorPickerOpen === "owner" ? null : "owner")}
+          style={{ ...paletteButtonStyle, color: ownerColorAbs }}
         >
           <Palette size={18} />
         </button>
       </div>
 
-      {colorPickerOpen === "me" && (
+      {colorPickerOpen === "owner" && (
         <ColorPicker
-          selectedColor={myColor}
+          selectedColor={ownerColorAbs}
           onSelect={(color) => {
-            setMyColor(color);
+            setOwnerColorAbs(color);
             setColorPickerOpen(null);
           }}
         />
@@ -640,8 +658,8 @@ function FamilySheet({
       <label style={sheetLabelStyle}>파트너 이름</label>
       <div style={nameColorRowStyle}>
         <input
-          value={partnerName}
-          onChange={(e) => setPartnerName(e.target.value)}
+          value={partnerNameInput}
+          onChange={(e) => setPartnerNameInput(e.target.value)}
           placeholder="파트너 이름 입력"
           style={sheetInputStyle}
         />
@@ -650,7 +668,7 @@ function FamilySheet({
           onClick={() =>
             setColorPickerOpen(colorPickerOpen === "partner" ? null : "partner")
           }
-          style={{ ...paletteButtonStyle, color: partnerColor }}
+          style={{ ...paletteButtonStyle, color: partnerColorAbs }}
         >
           <Palette size={18} />
         </button>
@@ -658,9 +676,9 @@ function FamilySheet({
 
       {colorPickerOpen === "partner" && (
         <ColorPicker
-          selectedColor={partnerColor}
+          selectedColor={partnerColorAbs}
           onSelect={(color) => {
-            setPartnerColor(color);
+            setPartnerColorAbs(color);
             setColorPickerOpen(null);
           }}
         />
@@ -672,17 +690,17 @@ function FamilySheet({
       </div>
 
       <div style={memberInlineRowStyle}>
-        <span style={{ ...memberPillStyle, background: myColor }}>
-          👽 {myName} · 나
+        <span style={{ ...memberPillStyle, background: ownerColorAbs }}>
+          👽 {ownerNameInput} · 대표
         </span>
-        <span style={{ ...memberPillStyle, background: partnerColor }}>
-          👽 {partnerName} · 파트너
+        <span style={{ ...memberPillStyle, background: partnerColorAbs }}>
+          👽 {partnerNameInput} · 파트너
         </span>
       </div>
 
       <button
         style={primaryButtonStyle}
-        onClick={() => onSaveNames(familyName, myName, partnerName, myColor, partnerColor)}
+        onClick={() => onSaveNames(familyName, ownerNameInput, partnerNameInput, ownerColorAbs, partnerColorAbs)}
       >
         저장하기
       </button>

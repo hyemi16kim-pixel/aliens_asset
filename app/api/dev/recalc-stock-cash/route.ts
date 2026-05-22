@@ -1,10 +1,25 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/components/lib/prisma";
 
-export async function POST() {
+export const dynamic = "force-dynamic";
+
+// GET: preview recalculation (no DB changes)
+export async function GET(req: NextRequest) {
+  const familyId = Number(req.nextUrl.searchParams.get("familyId") || 1);
+  return calcResult(familyId, false);
+}
+
+// POST: apply recalculation to DB
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => ({}));
+  const familyId = Number(body.familyId || req.nextUrl.searchParams.get("familyId") || 1);
+  return calcResult(familyId, true);
+}
+
+async function calcResult(familyId: number, apply: boolean) {
   try {
     const stockAccounts = await prisma.account.findMany({
-      where: { familyId: 1, type: "STOCK" },
+      where: { familyId, type: "STOCK" },
       include: { stockHoldings: true },
     });
 
@@ -13,71 +28,96 @@ export async function POST() {
     for (const account of stockAccounts) {
       const transactions = await prisma.transaction.findMany({
         where: {
-          familyId: 1,
+          familyId,
           OR: [{ fromAccountId: account.id }, { toAccountId: account.id }],
         },
       });
 
       let cashIn = 0;
       let cashOut = 0;
-      let buyTxTotal = 0;
+      const txLog: string[] = [];
 
       for (const tx of transactions) {
         const amount = Number(tx.amount || 0);
 
+        // Dividend income into this account
         if (tx.type === "INCOME" && tx.toAccountId === account.id) {
           cashIn += amount;
+          txLog.push("INCOME +" + amount + " [" + tx.category + "]");
         }
 
+        // Old-style EXPENSE (pre-fix stock trades recorded as EXPENSE)
         if (tx.type === "EXPENSE" && tx.fromAccountId === account.id) {
           cashOut += amount;
-
-          if (tx.category?.includes("주식 매수")) {
-            buyTxTotal += amount;
-          }
+          txLog.push("EXPENSE -" + amount + " [" + tx.category + "]");
         }
 
         if (tx.type === "TRANSFER") {
-          if (tx.toAccountId === account.id) cashIn += amount;
-          if (tx.fromAccountId === account.id) cashOut += amount;
+          if (tx.toAccountId === account.id) {
+            // Money in: deposit or stock sale proceeds
+            cashIn += amount;
+            txLog.push("TRANSFER_IN +" + amount + " [" + tx.category + "]");
+          }
+          if (tx.fromAccountId === account.id) {
+            // Money out: stock purchase or withdrawal
+            cashOut += amount;
+            txLog.push("TRANSFER_OUT -" + amount + " [" + tx.category + "]");
+          }
         }
       }
 
-      const holdingPurchaseTotal = account.stockHoldings.reduce(
-        (sum, item) =>
-          sum + Number(item.quantity || 0) * Number(item.avgPrice || 0),
+      // Handle manually-added holdings that have no corresponding trade transaction.
+      // Sum up recorded buy transactions (both TRANSFER and legacy EXPENSE).
+      const holdingsCost = (account.stockHoldings as any[]).reduce(
+        (sum: number, h: any) => sum + Number(h.quantity || 0) * Number(h.avgPrice || 0),
         0
       );
+      const txStockBuyOut = transactions
+        .filter((tx: any) =>
+          tx.category === "주식 매수" &&
+          tx.fromAccountId === account.id &&
+          (tx.type === "TRANSFER" || tx.type === "EXPENSE")
+        )
+        .reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
+      // Only add the gap (manually added holdings not in any transaction)
+      const unmatchedHoldingCost = Math.max(0, holdingsCost - txStockBuyOut);
+      if (unmatchedHoldingCost > 0) {
+        cashOut += unmatchedHoldingCost;
+        txLog.push("MANUAL_HOLDING -" + unmatchedHoldingCost);
+      }
 
-      const hasBuyTransactions = buyTxTotal > 0;
+      const newStockCash = Math.round(cashIn - cashOut);
+      const prevStockCash = Number(account.stockCash || 0);
 
-      const stockCash = hasBuyTransactions
-        ? cashIn - cashOut
-        : cashIn - holdingPurchaseTotal;
-
-      await prisma.account.update({
-        where: { id: account.id },
-        data: {
-          stockCash: Math.round(stockCash),
-          balance: 0,
-        },
-      });
+      if (apply) {
+        await prisma.account.update({
+          where: { id: account.id },
+          data: {
+            stockCash: newStockCash,
+            balance: newStockCash,
+          },
+        });
+      }
 
       results.push({
         accountId: account.id,
         name: account.name,
+        prevStockCash,
+        newStockCash,
         cashIn,
         cashOut,
-        buyTxTotal,
-        holdingPurchaseTotal,
-        stockCash,
+        txCount: transactions.length,
+        txLog,
+        applied: apply,
+        prevBalance: Number(account.balance || 0),
+        newBalance: newStockCash,
       });
     }
 
-    return NextResponse.json({ ok: true, results });
+    return NextResponse.json({ ok: true, familyId, results });
   } catch (error: any) {
     return NextResponse.json(
-      { error: "주식 예수금 재계산 실패", detail: error.message },
+      { error: "recalc failed", detail: error.message },
       { status: 500 }
     );
   }

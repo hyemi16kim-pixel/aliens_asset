@@ -8,9 +8,10 @@ export default function HeaderCard({ data = {} }: { data?: any }) {
 
 const totalAsset = Number(data?.totalAsset ?? 0);
 const debtAmount = Number(data?.debtAmount ?? 0);
+// 부채포함: 순자산(자산-부채) / 부채제외: 실물자산만(대출 카드 무시)
 const displayAsset = includeDebt
   ? totalAsset
-  : totalAsset + Math.abs(debtAmount);
+  : totalAsset + debtAmount;
   const monthlyChange = (data?.totalIncome || 0) - (data?.totalExpense || 0);
   const isPositive = monthlyChange >= 0;
 

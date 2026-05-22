@@ -142,6 +142,10 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
+    // Account type asset calculation:
+    // - STOCK: cash (stockCash) + stock holdings value (quantity x avgPrice)
+    // - LOAN/CARD: debt accounts - subtract (balance is positive = borrowed amount)
+    // - Others: add balance as-is
     const totalAsset = accounts.reduce((sum: number, account: any) => {
       if (account.type === "STOCK") {
         const stockValue = (account.stockHoldings || []).reduce(
@@ -150,13 +154,17 @@ export async function GET(req: NextRequest) {
             Number(holding.quantity || 0) * Number(holding.avgPrice || 0),
           0
         );
-
         return sum + Number(account.stockCash || 0) + stockValue;
+      }
+
+      if (account.type === "LOAN" || account.type === "CARD") {
+        return sum - Math.abs(Number(account.balance || 0));
       }
 
       return sum + Number(account.balance || 0);
     }, 0);
 
+    // debtAmount: total debt amount (expressed as positive number)
     const debtAmount = accounts
       .filter(
         (account: any) => account.type === "LOAN" || account.type === "CARD"
@@ -222,7 +230,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     return NextResponse.json(
-      { error: "대시보드 조회 실패", detail: error.message },
+      { error: "dashboard load failed", detail: error.message },
       { status: 500 }
     );
   }

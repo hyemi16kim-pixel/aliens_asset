@@ -12,9 +12,17 @@ async function applyBalance(tx: {
   toAccountId?: number | null;
 }) {
   if (tx.type === "EXPENSE" && tx.fromAccountId) {
+    const fromAccount = await prisma.account.findUnique({
+      where: { id: tx.fromAccountId },
+    });
     await prisma.account.update({
       where: { id: tx.fromAccountId },
-      data: { balance: { decrement: tx.amount } },
+      data: {
+        balance: { decrement: tx.amount },
+        // STOCK 계좌에서 지출(매수 등)하면 예수금도 차감
+        stockCash:
+          fromAccount?.type === "STOCK" ? { decrement: tx.amount } : undefined,
+      },
     });
   }
 
@@ -83,9 +91,17 @@ async function rollbackBalance(tx: {
   toAccountId?: number | null;
 }) {
   if (tx.type === "EXPENSE" && tx.fromAccountId) {
+    const fromAccount = await prisma.account.findUnique({
+      where: { id: tx.fromAccountId },
+    });
     await prisma.account.update({
       where: { id: tx.fromAccountId },
-      data: { balance: { increment: tx.amount } },
+      data: {
+        balance: { increment: tx.amount },
+        // STOCK 계좌 롤백 시 예수금도 복원
+        stockCash:
+          fromAccount?.type === "STOCK" ? { increment: tx.amount } : undefined,
+      },
     });
   }
 

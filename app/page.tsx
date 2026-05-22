@@ -9,6 +9,7 @@ import GoalCard from "@/components/dashboard/GoalCard";
 import RecentTransactions from "@/components/dashboard/RecentTransactions";
 import BottomNav from "@/components/navigation/BottomNav";
 import { Bell } from "lucide-react";
+import { getCurrentFamilyId, hasFamilyCode } from "@/components/lib/familyCode";
 import Link from "next/link";
 
 export default function HomePage() {
@@ -45,6 +46,13 @@ useEffect(() => {
   if (savedName) setMyName(savedName);
 
   async function loadHomeData() {
+    // 가족코드 없으면 setup으로
+    if (!hasFamilyCode()) {
+      router.replace("/setup");
+      return;
+    }
+    const familyId = getCurrentFamilyId();
+
     try {
       const monthStartDay = Number(
         localStorage.getItem("alien_month_start_day") || 1
@@ -58,7 +66,7 @@ useEffect(() => {
           : 1;
 
       const dashboardRes = await fetch(
-        `/api/dashboard?monthStartDay=${safeMonthStartDay}`,
+        `/api/dashboard?monthStartDay=${safeMonthStartDay}&familyId=${familyId}`,
         { cache: "no-store" }
       );
 
@@ -69,7 +77,7 @@ useEffect(() => {
     }
 
     try {
-      const goalsRes = await fetch(`/api/goals?t=${Date.now()}`, {
+      const goalsRes = await fetch(`/api/goals?familyId=${familyId}&t=${Date.now()}`, {
         cache: "no-store",
       });
 

@@ -189,7 +189,7 @@ const saveEditStock = async () => {
                 setAvgPrice(String(item.avgPrice));
             }}
             >
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <strong style={{ fontSize: 13 }}>
                 {item.name}({item.code})
               </strong>
@@ -198,8 +198,8 @@ const saveEditStock = async () => {
               </div>
             </div>
 
-            <div style={{ textAlign: "right" }}>
-              <strong>{money(item.marketValue)}</strong>
+            <div style={{ textAlign: "right", minWidth: 0 }}>
+              <strong style={{ whiteSpace: "nowrap" }}>{money(item.marketValue)}</strong>
               <div
                 style={{
                   fontSize: 11,
@@ -345,7 +345,8 @@ const cardStyle = {
   borderBottom: `1px solid ${theme.colors.border}`,
   display: "flex",
   justifyContent: "space-between",
-  gap: 12,
+  alignItems: "flex-start",
+  gap: 8,
   padding: "8px 0 12px",
 } as const;
 

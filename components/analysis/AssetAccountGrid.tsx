@@ -22,6 +22,7 @@ type Account = {
   name: string;
   type: string;
   balance: number;
+  stockCash?: number | null;
   cardPaymentDay?: number | null;
   cardCycleStartDay?: number | null;
   cardCycleEndDay?: number | null;
@@ -42,11 +43,13 @@ type Account = {
 
 function SortableCard({
   account,
+  users,
   onEdit,
   onPalette,
   onSelectStockAccount,
 }: {
   account: Account;
+  users: { id: number; name: string; role?: string }[];
   onEdit: () => void;
   onPalette: () => void;
   onSelectStockAccount: () => void;
@@ -108,6 +111,7 @@ function SortableCard({
     >
       <AssetAccountCard
         account={account}
+        users={users}
         onClick={handleCardClick}
         onDoubleClick={onEdit}
         onPalette={onPalette}
@@ -148,11 +152,13 @@ function SortableCard({
 
 export default function AssetAccountGrid({
   accounts,
+  users = [],
   onEdit,
   onPalette,
   onSelectStockAccount,
 }: {
   accounts: Account[];
+  users?: { id: number; name: string; role?: string }[];
   onEdit: (account: Account) => void;
   onPalette: (account: Account) => void;
   onSelectStockAccount: (account: Account) => void;
@@ -199,6 +205,7 @@ export default function AssetAccountGrid({
             <SortableCard
               key={account.id}
               account={account}
+              users={users}
               onEdit={() => onEdit(account)}
               onPalette={() => onPalette(account)}
               onSelectStockAccount={() => onSelectStockAccount(account)}
