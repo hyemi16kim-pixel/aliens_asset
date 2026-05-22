@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  serverExternalPackages: ["@capacitor/core", "@capacitor/android", "@capacitor/cli"],
 };
 
 export default nextConfig;
