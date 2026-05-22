@@ -7,6 +7,7 @@ import {
   getOwnerColor,
   mapOwnerName,
 } from "@/components/lib/profileSettings";
+import { getCurrentFamilyId } from "@/components/lib/familyCode";
 
 type Transaction = {
   id: number;
@@ -17,11 +18,39 @@ type Transaction = {
   memo?: string | null;
 };
 
+const englishIconMap: Record<string, string> = {
+  home: "🏠", utensils: "🍽️", coffee: "☕", shopping: "🛒",
+  bus: "🚌", heart: "💗", gamepad: "🎮", film: "🎬", gift: "🎁",
+  hospital: "🏥", book: "📚", dumbbell: "🏋️", plane: "✈️",
+  shirt: "👕", phone: "📱", paw: "🐾", baby: "👶", music: "🎵",
+  briefcase: "💼", building: "🏢", trending: "📈", card: "💳",
+  refresh: "🔁", zap: "⚡", coins: "🪙", pencil: "✏️",
+  handcoins: "🤲", trophy: "🏆", banknote: "💵", store: "🏪",
+  wallet: "👛", landmark: "🏦", piggybank: "🐷", shoppingcart: "🛒",
+};
+
 export default function RecentTransactions({
   items = [],
 }: {
   items?: Transaction[];
 }) {
+  const [dbIconMap, setDbIconMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    try {
+      const familyId = getCurrentFamilyId();
+      if (!familyId) return;
+      Promise.all([
+        fetch(`/api/categories?familyId=${familyId}&type=EXPENSE`).then(r => r.json()),
+        fetch(`/api/categories?familyId=${familyId}&type=INCOME`).then(r => r.json()),
+      ]).then(([exp, inc]) => {
+        const all = [...(Array.isArray(exp) ? exp : []), ...(Array.isArray(inc) ? inc : [])];
+        const map: Record<string, string> = {};
+        all.forEach((cat: any) => { if (cat.name && cat.icon) map[cat.name] = cat.icon; });
+        setDbIconMap(map);
+      }).catch(() => {});
+    } catch {}
+  }, []);
 
 const iconEmojiMap: Record<string, string> = {
   식비: "🍽️",
@@ -59,22 +88,17 @@ const iconEmojiMap: Record<string, string> = {
 };
 
 const getIcon = (tx: Transaction) => {
-  if (tx.category.includes("주식 매수")) return "📈";
-  if (tx.category.includes("주식 매도")) return "📉";
-
-  const savedKeys = ["EXPENSE", "INCOME", "TRANSFER"];
-
-  for (const key of savedKeys) {
-    const saved = localStorage.getItem(`alien_custom_categories_${key}`);
-    const list = saved ? JSON.parse(saved) : [];
-    const found = list.find((item: any) => item.name === tx.category);
-
-    if (found) {
-      return iconEmojiMap[found.iconKey] || "👽";
-    }
-  }
-
-  return iconEmojiMap[tx.category] || "👽";
+  const cat = tx.category || "";
+  if (cat.includes("주식 매수")) return "📈";
+  if (cat.includes("주식 매도")) return "📉";
+  // 1st: built-in emoji map (Korean category names)
+  if (iconEmojiMap[cat]) return iconEmojiMap[cat];
+  // 2nd: DB icon key (English) → emoji
+  const dbKey = dbIconMap[cat];
+  if (dbKey && englishIconMap[dbKey]) return englishIconMap[dbKey];
+  // TRANSFER with no category
+  if (tx.type === "TRANSFER") return "🔁";
+  return "👽";
 };
 
   const formatAmount = (tx: Transaction) => {
@@ -210,7 +234,7 @@ const getIcon = (tx: Transaction) => {
         whiteSpace: "nowrap",
       }}
     >
-      {tx.category}
+      {tx.category || (tx.type === "TRANSFER" ? "이체" : "기타")}
     </span>
 
     {tx.memo && (

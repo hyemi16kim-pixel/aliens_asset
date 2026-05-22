@@ -5,8 +5,14 @@ import BottomNav from "@/components/navigation/BottomNav";
 import { theme } from "@/components/lib/theme";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { readRecentSms } from "@/components/lib/smsReader";
+import {
+  readRecentKakao,
+  isKakaoPermissionGranted,
+  requestKakaoPermission,
+} from "@/components/lib/kakaoReader";
 import { getCurrentFamilyId, getCurrentUserId } from "@/components/lib/familyCode";
 import { cacheProfileSettings, getProfileSettings } from "@/components/lib/profileSettings";
+import { useKeyboardOffset, scrollInputIntoView } from "@/components/lib/useKeyboardOffset";
 
 import {
   X,
@@ -205,6 +211,7 @@ export default function AddTransactionPage() {
   const [hiddenImportIds, setHiddenImportIds] = useState<string[]>([]);
 
   const [stockTradeType, setStockTradeType] = useState<"BUY" | "SELL" | "DIVIDEND">("BUY");
+  const keyboardHeight = useKeyboardOffset();
   const [dividendAmount, setDividendAmount] = useState("");
   const [stockAccountId, setStockAccountId] = useState("");
   const [stockName, setStockName] = useState("");
@@ -705,23 +712,49 @@ const loadImportedMessages = async () => {
   try {
     setIsLoadingMessages(true);
 
+    // 1) SMS
     const smsList = await readRecentSms(50);
-
-    const nextMessages: ImportedMessage[] = smsList.map((sms) => ({
+    const smsMessages: ImportedMessage[] = smsList.map((sms) => ({
       receivedAt: new Date(sms.date).toISOString(),
       id: `sms-${sms.id}`,
-      sourceType: "SMS",
+      sourceType: "SMS" as const,
       sourceKey: sms.address || "",
       rawText: sms.body || "",
     }));
 
-    setImportedMessages(nextMessages);
+    // 2) KakaoTalk notifications
+    let kakaoMessages: ImportedMessage[] = [];
+    try {
+      const granted = await isKakaoPermissionGranted();
+      if (granted) {
+        const kakaoList = await readRecentKakao(50);
+        kakaoMessages = kakaoList.map((k) => ({
+          receivedAt: new Date(k.date).toISOString(),
+          id: `kakao-${k.id}`,
+          sourceType: "KAKAO" as const,
+          sourceKey: k.sender || "",
+          rawText: k.body || "",
+        }));
+      }
+    } catch {}
+
+    // Merge and sort newest first
+    const merged = [...smsMessages, ...kakaoMessages].sort(
+      (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+    );
+
+    setImportedMessages(merged);
   } catch (error) {
     console.error(error);
-    alert("문자 불러오기에 실패했습니다.");
+    alert("내역 불러오기에 실패했습니다.");
   } finally {
     setIsLoadingMessages(false);
   }
+};
+
+// Opens Android Notification Access settings so user can grant Kakao permission
+const openKakaoPermissionSettings = async () => {
+  await requestKakaoPermission();
 };
 
 
@@ -1006,7 +1039,35 @@ console.log("MATCH_DEBUG", {
   <section style={importBoxStyle}>
     <div style={importHeaderStyle}>
       <strong>불러온 내역</strong>
-      <span>SMS / 카카오톡 후보</span>
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <span style={{ fontSize: 10, color: theme.colors.subtext }}>SMS + 카카오</span>
+        <button
+          type="button"
+          onClick={async () => {
+            const granted = await isKakaoPermissionGranted();
+            if (granted) {
+              alert("카카오톡 알림 접근이 이미 허용되어 있습니다.");
+            } else {
+              if (confirm("카카오톡 알림을 읽으려면 알림 접근 권한이 필요합니다.\n설정 화면을 열까요?")) {
+                await openKakaoPermissionSettings();
+              }
+            }
+          }}
+          style={{
+            border: "1px solid #F7E600",
+            background: "#FFF9CC",
+            color: "#7A6A00",
+            borderRadius: 999,
+            height: 22,
+            padding: "0 8px",
+            fontSize: 10,
+            fontWeight: 900,
+            cursor: "pointer",
+          }}
+        >
+          💬 카카오 권한
+        </button>
+      </div>
     </div>
 
 
@@ -1135,6 +1196,7 @@ console.log("MATCH_DEBUG", {
           <input
             value={amount ? Number(amount).toLocaleString() : ""}
             onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
+            onFocus={(e) => scrollInputIntoView(e.currentTarget)}
             style={{ ...amountInputStyle, color: activeColor }}
           />
         </div>
@@ -1186,6 +1248,7 @@ console.log("MATCH_DEBUG", {
           value={memo}
           onChange={(e) => setMemo(e.target.value)}
           placeholder="메모 (선택)"
+          onFocus={(e) => scrollInputIntoView(e.currentTarget)}
           style={{ flex: 1, border: "none", outline: "none", fontSize: 13, fontWeight: 600, background: "transparent", color: theme.colors.text }}
         />
       </div>
@@ -1668,13 +1731,14 @@ console.log("MATCH_DEBUG", {
       {inputMode === "MANUAL" && (
         <div style={{
           position: "fixed",
-          bottom: 88,
+          bottom: keyboardHeight > 0 ? keyboardHeight + 8 : 88,
           left: 0, right: 0,
           padding: "10px 18px",
           background: "linear-gradient(to top, rgba(255,255,255,1) 60%, rgba(255,255,255,0))",
           zIndex: 50,
           display: "flex",
           justifyContent: "center",
+          transition: "bottom 0.2s ease",
         }}>
           <button
             onClick={saveTransaction}

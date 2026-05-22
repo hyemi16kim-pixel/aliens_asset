@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { theme } from "@/components/lib/theme";
+import { useKeyboardOffset, scrollInputIntoView } from "@/components/lib/useKeyboardOffset";
 
 type Holding = {
   id: number;
@@ -35,6 +36,7 @@ export default function StockHoldingList({
   const [loading, setLoading] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [editingItem, setEditingItem] = useState<Holding | null>(null);
+  const keyboardHeight = useKeyboardOffset();
 
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -218,7 +220,7 @@ const saveEditStock = async () => {
       </div>
 
       {showAdd && (
-        <div style={modalOverlayStyle}>
+        <div style={{ ...modalOverlayStyle, paddingBottom: keyboardHeight > 0 ? keyboardHeight : 0 }}>
           <div style={modalStyle}>
             <strong>보유종목 추가</strong>
 
@@ -264,7 +266,7 @@ const saveEditStock = async () => {
       )}
 
       {editingItem && (
-        <div style={modalOverlayStyle}>
+        <div style={{ ...modalOverlayStyle, paddingBottom: keyboardHeight > 0 ? keyboardHeight : 0 }}>
             <div style={modalStyle}>
             <strong>보유종목 수정</strong>
 
@@ -278,6 +280,7 @@ const saveEditStock = async () => {
                 onChange={(e) => setQuantity(e.target.value)}
                 placeholder="예: 10"
                 type="number"
+                onFocus={(e) => scrollInputIntoView(e.currentTarget)}
                 style={inputStyle}
                 />
 
@@ -287,6 +290,7 @@ const saveEditStock = async () => {
                 onChange={(e) => setAvgPrice(e.target.value)}
                 placeholder="예: 70000"
                 type="number"
+                onFocus={(e) => scrollInputIntoView(e.currentTarget)}
                 style={inputStyle}
                 />
 

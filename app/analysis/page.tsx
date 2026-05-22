@@ -7,6 +7,7 @@ import SpendingCategoryCard from "@/components/dashboard/SpendingCategoryCard";
 import { ChevronLeft } from "lucide-react";
 import { theme } from "@/components/lib/theme";
 import { getCurrentFamilyId, getCurrentFamilyCode, getCurrentUserId } from "@/components/lib/familyCode";
+import { useKeyboardOffset, scrollInputIntoView } from "@/components/lib/useKeyboardOffset";
 import AssetAccountGrid from "@/components/analysis/AssetAccountGrid";
 import StockHoldingList from "@/components/analysis/StockHoldingList";
 import { Suspense } from "react";
@@ -49,7 +50,30 @@ import {
   Heart,
   Wallet,
   ArrowLeftRight,
+  Building2,
+  RefreshCw,
+  Zap,
+  Coins,
+  Pencil,
+  HandCoins,
+  Trophy,
+  Banknote,
+  Store,
+  ShoppingCart,
 } from "lucide-react";
+
+// English icon key → Lucide component (profile page stores English keys in DB)
+const englishIconMap: Record<string, React.ElementType> = {
+  home: Home, utensils: Utensils, coffee: Coffee, shopping: ShoppingBag,
+  bus: Bus, heart: Heart, gamepad: Gamepad2, film: Film, gift: Gift,
+  hospital: Hospital, book: BookOpen, dumbbell: Dumbbell, plane: Plane,
+  shirt: Shirt, phone: Smartphone, paw: PawPrint, baby: Baby, music: Music,
+  briefcase: Briefcase, building: Building2, trending: TrendingUp,
+  card: CreditCard, refresh: RefreshCw, zap: Zap, coins: Coins,
+  pencil: Pencil, handcoins: HandCoins, trophy: Trophy, banknote: Banknote,
+  store: Store, wallet: Wallet, landmark: Landmark, piggybank: PiggyBank,
+  shoppingcart: ShoppingCart,
+};
 
 const categoryIconMap = [
   { key: "식비", icon: Utensils, bg: "#FFF3F6" },
@@ -230,6 +254,9 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
 
   const [accountColor, setAccountColor] = useState("#F6F0FF");
   const [assetOwnerFilter, setAssetOwnerFilter] = useState("전체");
+  const keyboardHeight = useKeyboardOffset();
+  // DB categories: name -> English icon key (from profile page)
+  const [dbCategoryIconMap, setDbCategoryIconMap] = useState<Record<string, string>>({});
   const fetchAccounts = async () => {
     try {
       const res = await fetch(`/api/accounts?familyId=${getCurrentFamilyId()}`);
@@ -290,6 +317,20 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
   .catch(console.error);
 
     fetchAccounts();
+
+    // Fetch all categories to build icon map (EXPENSE + INCOME + TRANSFER)
+    const familyId = getCurrentFamilyId();
+    Promise.all([
+      fetch(`/api/categories?familyId=${familyId}&type=EXPENSE`).then(r => r.json()),
+      fetch(`/api/categories?familyId=${familyId}&type=INCOME`).then(r => r.json()),
+    ]).then(([expCats, incCats]) => {
+      const all = [...(Array.isArray(expCats) ? expCats : []), ...(Array.isArray(incCats) ? incCats : [])];
+      const iconMap: Record<string, string> = {};
+      all.forEach((cat: any) => {
+        if (cat.name && cat.icon) iconMap[cat.name] = cat.icon;
+      });
+      setDbCategoryIconMap(iconMap);
+    }).catch(() => {});
   }, []);
 
 const expenses = transactions.filter((tx) => tx.type === "EXPENSE");
@@ -438,13 +479,25 @@ const getPercent = (owner: string) => {
           <div style={budgetUsageListStyle}>
             {topCategories.map((item) => {
               const name = item.name;
-              const iconData = getCustomCategoryIcon(name);
-              const Icon = iconData.icon;
+              // 1st: match by category name in built-in Korean map
+              let iconData = categoryIconMap.find(m => m.key === name) || null;
+              // 2nd: look up DB icon key (English) from fetched categories
+              let FinalIcon: React.ElementType = iconData ? iconData.icon : Utensils;
+              let finalBg = iconData ? iconData.bg : "#FFF3F6";
+              if (!iconData) {
+                const dbIconKey = dbCategoryIconMap[name];
+                if (dbIconKey && englishIconMap[dbIconKey]) {
+                  FinalIcon = englishIconMap[dbIconKey];
+                  finalBg = "#F4F0FF";
+                }
+              }
+              const Icon = FinalIcon;
+              const iconBg = finalBg;
 
               return (
                 <div key={name} style={categoryRowStyle}>
                   <div style={categoryLeftStyle}>
-                    <div style={{ ...categoryIconBoxStyle, background: iconData.bg }}>
+                    <div style={{ ...categoryIconBoxStyle, background: iconBg }}>
                       <Icon size={14} color={theme.colors.primary} />
                     </div>
                     <span>{name}</span>
@@ -943,7 +996,7 @@ const lastMonthExpenses = expenses.filter((tx) =>
 })()}
 
 {showAccountModal && (
-  <div style={modalOverlayStyle}>
+  <div style={{ ...modalOverlayStyle, paddingBottom: keyboardHeight > 0 ? keyboardHeight : 0 }}>
     <div style={modalStyle}>
     {/* 핸들 */}
     <div style={{ display: "flex", justifyContent: "center", paddingTop: 14, paddingBottom: 2 }}>
@@ -994,12 +1047,14 @@ const lastMonthExpenses = expenses.filter((tx) =>
       <input
         value={accountName}
         onChange={(e) => setAccountName(e.target.value)}
+          onFocus={(e) => scrollInputIntoView(e.currentTarget)}
         placeholder="자산 이름"
         style={inputStyle}
       />
       <input
         value={accountSourceKey}
         onChange={(e) => setAccountSourceKey(e.target.value)}
+          onFocus={(e) => scrollInputIntoView(e.currentTarget)}
         placeholder="전화번호 / 카카오 이름"
         style={inputStyle}
       />
@@ -1049,6 +1104,7 @@ const lastMonthExpenses = expenses.filter((tx) =>
       <input
         value={accountBalance}
         onChange={(e) => setAccountBalance(e.target.value)}
+          onFocus={(e) => scrollInputIntoView(e.currentTarget)}
         placeholder="현재 금액 (주식계좌는 자동계산)"
         type="number"
         style={inputStyle}
@@ -1060,6 +1116,7 @@ const lastMonthExpenses = expenses.filter((tx) =>
     <input
       value={stockCashInput}
       onChange={(e) => setStockCashInput(e.target.value)}
+          onFocus={(e) => scrollInputIntoView(e.currentTarget)}
       placeholder="예수금 잔액 (원)"
       type="number"
       style={inputStyle}
@@ -1083,6 +1140,7 @@ const lastMonthExpenses = expenses.filter((tx) =>
             placeholder="16"
             value={cardPaymentDay}
             onChange={(e) => setCardPaymentDay(e.target.value)}
+          onFocus={(e) => scrollInputIntoView(e.currentTarget)}
             style={dayInputStyle}
           />
           <span style={daySuffixStyle}>일</span>
@@ -1120,6 +1178,7 @@ const lastMonthExpenses = expenses.filter((tx) =>
       type="date"
       value={maturityDate}
       onChange={(e) => setMaturityDate(e.target.value)}
+          onFocus={(e) => scrollInputIntoView(e.currentTarget)}
       style={inputStyle}
     />
   </>
@@ -1133,6 +1192,7 @@ const lastMonthExpenses = expenses.filter((tx) =>
       placeholder="예: 500000"
       value={monthlyPayment}
       onChange={(e) => setMonthlyPayment(e.target.value)}
+          onFocus={(e) => scrollInputIntoView(e.currentTarget)}
       style={inputStyle}
     />
   </>
@@ -1279,7 +1339,7 @@ const lastMonthExpenses = expenses.filter((tx) =>
 )}
 
 {selectedPaletteAccount && (
-  <div style={modalOverlayStyle}>
+  <div style={{ ...modalOverlayStyle, paddingBottom: keyboardHeight > 0 ? keyboardHeight : 0 }}>
     <div style={modalStyle}>
     <div style={{ display: "flex", justifyContent: "center", paddingTop: 14, paddingBottom: 2 }}>
       <div style={{ width: 40, height: 4, borderRadius: 2, background: "#E0D9F5" }} />
