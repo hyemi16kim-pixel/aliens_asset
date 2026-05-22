@@ -1044,13 +1044,17 @@ console.log("MATCH_DEBUG", {
         <button
           type="button"
           onClick={async () => {
+            // 웹(Vercel)에서는 안내 메시지만 표시
+            if (typeof window !== "undefined" && !(window as any).Capacitor?.isNativePlatform?.()) {
+              alert("카카오톡 알림 읽기는 Android 앱에서만 지원됩니다.\n앱을 설치 후 사용해주세요.");
+              return;
+            }
             const granted = await isKakaoPermissionGranted();
             if (granted) {
-              alert("카카오톡 알림 접근이 이미 허용되어 있습니다.");
+              alert("카카오톡 알림 접근이 이미 허용되어 있습니다.\n불러오기 버튼을 눌러주세요.");
             } else {
-              if (confirm("카카오톡 알림을 읽으려면 알림 접근 권한이 필요합니다.\n설정 화면을 열까요?")) {
-                await openKakaoPermissionSettings();
-              }
+              await openKakaoPermissionSettings();
+              alert("설정에서 AlienAsset의 알림 접근을 허용한 후\n불러오기 버튼을 다시 눌러주세요.");
             }
           }}
           style={{

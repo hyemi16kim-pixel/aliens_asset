@@ -19,6 +19,10 @@ type KakaoReaderPlugin = {
 
 const KakaoReader = registerPlugin<KakaoReaderPlugin>("KakaoReader");
 
+export function isNativeApp(): boolean {
+  return Capacitor.isNativePlatform();
+}
+
 export async function isKakaoPermissionGranted(): Promise<boolean> {
   if (!Capacitor.isNativePlatform()) return false;
   try {
@@ -30,8 +34,15 @@ export async function isKakaoPermissionGranted(): Promise<boolean> {
 }
 
 export async function requestKakaoPermission(): Promise<void> {
-  if (!Capacitor.isNativePlatform()) return;
-  await KakaoReader.requestPermission();
+  if (!Capacitor.isNativePlatform()) {
+    // 웹 환경: 네이티브 설정 화면을 열 수 없음
+    return;
+  }
+  try {
+    await KakaoReader.requestPermission();
+  } catch (e) {
+    console.error("KakaoReader.requestPermission error:", e);
+  }
 }
 
 export async function readRecentKakao(limit = 50): Promise<KakaoMessage[]> {

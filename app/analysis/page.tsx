@@ -733,38 +733,6 @@ const getPercent = (owner: string) => {
               />
             )}
 
-            {accounts.some((a) => a.type === "STOCK") && (
-              <div style={{ padding: "4px 2px" }}>
-                <button
-                  onClick={async () => {
-                    const familyId = getCurrentFamilyId();
-                    const preview = await fetch("/api/dev/recalc-stock-cash?familyId=" + familyId).then((r) => r.json());
-                    const msg = (preview.results || []).map((r: any) =>
-                      r.name + ": 현재 " + r.prevStockCash.toLocaleString() + "원 -> 재계산 " + r.newStockCash.toLocaleString() + "원 (유입 " + r.cashIn.toLocaleString() + " / 유출 " + r.cashOut.toLocaleString() + " / 거래 " + r.txCount + "건)"
-                    ).join(" | ");
-                    const ok = window.confirm("거래내역 기준 예수금 재계산 결과: " + msg + " 적용하시겠습니까?");
-                    if (!ok) return;
-                    const res = await fetch("/api/dev/recalc-stock-cash", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ familyId }),
-                    });
-                    const data = await res.json();
-                    if (!data.ok) { alert("재계산 실패: " + (data.error || "")); return; }
-                    alert("예수금이 재계산되었습니다.");
-                    fetchAccounts();
-                  }}
-                  style={{
-                    width: "100%", height: 44, borderRadius: 14,
-                    border: "1.5px dashed #C4B5FD",
-                    background: "transparent", color: "#7C5CFF",
-                    fontSize: 13, fontWeight: 800, cursor: "pointer",
-                  }}
-                >
-                  {"🔄 주식계좌 예수금 거래내역 기준 재계산"}
-                </button>
-              </div>
-            )}
           </>
         )}
 
