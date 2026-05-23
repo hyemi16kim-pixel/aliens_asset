@@ -282,4 +282,7 @@ export default function AssetAccountGrid({
         onPalette={onPalette}
         onSelectStockAccount={onSelectStockAccount}
         onDragEnd={makeHandler(debtAccounts)}
-   
+      />
+    </div>
+  );
+}
