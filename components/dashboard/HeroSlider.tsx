@@ -499,4 +499,8 @@ function MonthSummaryCard({ data }: { data?: any }) {
 export default function HeroSlider({ data, goals }: { data?: any; goals?: Goal[] }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
- 
+      <HeroCard data={data} goals={goals} />
+      <MonthSummaryCard data={data} />
+    </div>
+  );
+}
