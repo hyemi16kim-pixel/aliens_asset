@@ -199,4 +199,13 @@ export default function HomePage() {
         <div style={{ flex: 1, minHeight: 200, overflow: "hidden" }}>
           <RecentTransactions items={dashboard?.recentTransactions || []} />
         </div>
-        <BottomNav /
+        <BottomNav />
+        <div style={{ flexShrink: 0, height: "calc(76px + env(safe-area-inset-bottom))" }} />
+      </div>
+
+      {showMemo && familyId && (
+        <MemoSheet familyId={familyId} onClose={() => setShowMemo(false)} />
+      )}
+    </main>
+  );
+}
