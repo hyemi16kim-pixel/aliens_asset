@@ -757,6 +757,57 @@ const openKakaoPermissionSettings = async () => {
   await requestKakaoPermission();
 };
 
+// 새 메시지만 추가로 불러오기 (기존 목록 유지, 새 것만 prepend)
+const refreshImportedMessages = async () => {
+  try {
+    setIsLoadingMessages(true);
+    const existingIds = new Set(importedMessages.map((m) => m.id));
+
+    const smsList = await readRecentSms(50);
+    const smsNew: ImportedMessage[] = smsList
+      .map((sms) => ({
+        receivedAt: new Date(sms.date).toISOString(),
+        id: `sms-${sms.id}`,
+        sourceType: "SMS" as const,
+        sourceKey: sms.address || "",
+        rawText: sms.body || "",
+      }))
+      .filter((m) => !existingIds.has(m.id));
+
+    let kakaoNew: ImportedMessage[] = [];
+    try {
+      const granted = await isKakaoPermissionGranted();
+      if (granted) {
+        const kakaoList = await readRecentKakao(50);
+        kakaoNew = kakaoList
+          .map((k) => ({
+            receivedAt: new Date(k.date).toISOString(),
+            id: `kakao-${k.id}`,
+            sourceType: "KAKAO" as const,
+            sourceKey: k.sender || "",
+            rawText: k.body || "",
+          }))
+          .filter((m) => !existingIds.has(m.id));
+      }
+    } catch {}
+
+    const newMessages = [...smsNew, ...kakaoNew].sort(
+      (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+    );
+
+    if (newMessages.length === 0) {
+      alert("새로 받은 문자/카카오 내역이 없습니다.");
+      return;
+    }
+    setImportedMessages((prev) => [...newMessages, ...prev]);
+  } catch (error) {
+    console.error(error);
+    alert("새로고침에 실패했습니다.");
+  } finally {
+    setIsLoadingMessages(false);
+  }
+};
+
 
 const applyImportedCandidate = (candidate: ImportedMessage) => {
   if (accounts.length === 0) {
@@ -1041,6 +1092,25 @@ console.log("MATCH_DEBUG", {
       <strong>불러온 내역</strong>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         <span style={{ fontSize: 10, color: theme.colors.subtext }}>SMS + 카카오</span>
+        <button
+          type="button"
+          onClick={refreshImportedMessages}
+          disabled={isLoadingMessages}
+          style={{
+            border: "1px solid #DDD6FE",
+            background: "#F4EFFE",
+            color: "#7C5CFF",
+            borderRadius: 999,
+            height: 22,
+            padding: "0 8px",
+            fontSize: 10,
+            fontWeight: 900,
+            cursor: "pointer",
+            opacity: isLoadingMessages ? 0.5 : 1,
+          }}
+        >
+          {isLoadingMessages ? "⏳" : "🔄 새로고침"}
+        </button>
         <button
           type="button"
           onClick={async () => {
