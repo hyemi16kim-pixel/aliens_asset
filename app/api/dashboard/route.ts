@@ -263,4 +263,11 @@ export async function GET(req: NextRequest) {
       familyUsers,
       monthRange: {
         start: currentRange.start.toISOString(),
-        end: cur
+        end: currentRange.end.toISOString(),
+            },
+    });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "dashboard error" }, { status: 500 });
+  }
+}

@@ -164,16 +164,25 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const familyId = Number(searchParams.get("familyId") || 1);
     const limitParam = searchParams.get("limit");
-    const limit = limitParam ? Number(limitParam) : undefined;
+    const limit = limitParam ? Number(limitParam) : 300; // 기본 최대 300개
 
     const transactions = await prisma.transaction.findMany({
       where: { familyId },
-      include: {
+      select: {
+        id: true,
+        type: true,
+        amount: true,
+        category: true,
+        owner: true,
+        memo: true,
+        transactionAt: true,
+        fromAccountId: true,
+        toAccountId: true,
         fromAccount: { select: { id: true, name: true, type: true } },
         toAccount: { select: { id: true, name: true, type: true } },
       },
-      orderBy: limit ? { id: "desc" } : { transactionAt: "desc" },
-      ...(limit ? { take: limit } : {}),
+      orderBy: { transactionAt: "desc" },
+      take: limit,
     });
 
     return NextResponse.json(transactions);
