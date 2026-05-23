@@ -115,45 +115,29 @@ const getIcon = (tx: Transaction) => {
         padding: "20px",
         border: `1px solid ${theme.colors.border}`,
         boxShadow: theme.shadow.sm,
+        height: "100%",
+        boxSizing: "border-box",
+        display: "flex",
+        flexDirection: "column",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 14,
-        }}
-      >
-        <strong style={{ fontSize: 15, fontWeight: 800, color: theme.colors.text }}>최근 거래내역</strong>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ width: 4, height: 18, borderRadius: 999, background: "linear-gradient(180deg, #7C5CFF, #A78BFA)" }} />
+          <strong style={{ fontSize: 15, fontWeight: 900, color: theme.colors.text }}>최근 거래내역</strong>
+        </div>
         <Link
-          href="/transactions"
-          style={{
-            fontSize: 11,
-            color: theme.colors.primary,
-            textDecoration: "none",
-            fontWeight: 800,
-            transition: "color 0.2s ease",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = theme.colors.primaryDark)}
-          onMouseLeave={(e) => (e.currentTarget.style.color = theme.colors.primary)}
+          href="/transactions?view=all"
+          style={{ fontSize: 11, color: theme.colors.primary, textDecoration: "none", fontWeight: 800 }}
         >
           전체 보기 →
         </Link>
       </div>
 
       {items.length === 0 ? (
-        <div
-          style={{
-            fontSize: 13,
-            color: theme.colors.subtext,
-            padding: "20px",
-            textAlign: "center",
-            background: theme.colors.bgLight,
-            borderRadius: 12,
-          }}
-        >
-          아직 거래가 없습니다.
+        <div style={{ textAlign: "center", padding: "24px 0", color: theme.colors.subtext }}>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>👽</div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>아직 거래가 없습니다</div>
         </div>
 ) : (
   <div style={scrollListStyle}>
@@ -161,28 +145,16 @@ const getIcon = (tx: Transaction) => {
   .slice()
   .sort((a, b) => b.id - a.id)
   .slice(0, 20)
-  .map((tx) => (
+  .map((tx, idx, arr) => (
           <div
             key={tx.id}
             style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              padding: "12px",
+              padding: "9px 2px",
               fontSize: 13,
-              borderRadius: 12,
-              marginBottom: 6,
-              background: theme.colors.bgLight,
-              border: `1px solid ${theme.colors.border}`,
-              transition: "all 0.2s ease",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = theme.colors.border;
-              e.currentTarget.style.transform = "translateX(2px)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = theme.colors.bgLight;
-              e.currentTarget.style.transform = "translateX(0)";
+              borderBottom: idx < arr.length - 1 ? "1.5px dashed #EDE6F9" : "none",
             }}
           >
             <div
@@ -194,7 +166,12 @@ const getIcon = (tx: Transaction) => {
                 flex: 1,
               }}
             >
-  <span style={{ width: 16, textAlign: "center" }}>{getIcon(tx)}</span>
+  <div style={{
+    width: 36, height: 36, borderRadius: 12, flexShrink: 0,
+    background: tx.type === "INCOME" ? "#ECFFF6" : tx.type === "EXPENSE" ? "#FFF3F6" : "#F4EFFE",
+    display: "grid", placeItems: "center", fontSize: 17,
+    border: tx.type === "INCOME" ? "1.5px solid #A7F3D0" : tx.type === "EXPENSE" ? "1.5px solid #FFCCD8" : "1.5px solid #DDD6FE",
+  }}>{getIcon(tx)}</div>
 
   <div
     style={{
@@ -255,14 +232,17 @@ const getIcon = (tx: Transaction) => {
 
             <strong
               style={{
-                 flexShrink: 0,
-                 marginLeft: 8,
+                flexShrink: 0,
+                marginLeft: 8,
+                fontSize: 13,
+                fontWeight: 900,
+                letterSpacing: "-0.3px",
                 color:
-                tx.type === "INCOME"
-                  ? theme.colors.income
-                  : tx.type === "EXPENSE"
-                  ? theme.colors.expense
-                  : theme.colors.primary,
+                  tx.type === "INCOME"
+                    ? "#059669"
+                    : tx.type === "EXPENSE"
+                    ? "#FF3B70"
+                    : theme.colors.primary,
               }}
             >
               {formatAmount(tx)}
@@ -276,27 +256,16 @@ const getIcon = (tx: Transaction) => {
 }
 
 const scrollListStyle = {
-  height: 150,
-  maxHeight: 190,
+  flex: 1,
+  minHeight: 0,
   overflowY: "auto",
   overflowX: "hidden",
   WebkitOverflowScrolling: "touch",
   overscrollBehavior: "contain",
   touchAction: "pan-y",
-  paddingRight: 2,
 } as const;
 
 
 const ownerNameRowStyle = {
   display: "flex",
   alignItems: "center",
-  gap: 5,
-  minWidth: 0,
-} as const;
-
-const ownerDotStyle = {
-  width: 8,
-  height: 8,
-  borderRadius: 999,
-  flexShrink: 0,
-} as const;

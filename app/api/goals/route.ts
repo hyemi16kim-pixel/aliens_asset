@@ -67,6 +67,16 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
+    // isPinned 전용 토글
+    if (body.isPinnedToggle) {
+      const current = await prisma.goal.findUnique({ where: { id: body.id }, select: { isPinned: true } });
+      const updated = await prisma.goal.update({
+        where: { id: body.id },
+        data: { isPinned: !current?.isPinned },
+      });
+      return NextResponse.json(updated);
+    }
+
     const updated = await prisma.goal.update({
       where: {
         id: body.id,
@@ -103,12 +113,7 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    await prisma.goal.delete({
-      where: {
-        id,
-      },
-    });
-
+    await prisma.goal.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("목표 삭제 실패:", error);

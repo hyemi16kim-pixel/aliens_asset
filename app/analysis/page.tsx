@@ -289,48 +289,49 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
   }, []);
 
   useEffect(() => {
-    fetch(`/api/transactions?familyId=${getCurrentFamilyId()}`)
-      .then((res) => res.json())
-      .then((data) => setTransactions(data || []))
-      .catch(console.error);
     const savedStartDay = getSavedMonthStartDay();
     setMonthStartDay(savedStartDay);
     setTrendMonth(getBaseMonthByStartDay(new Date(), savedStartDay));
 
-     fetch(`/api/profile?code=${encodeURIComponent(getCurrentFamilyCode())}`)
-      .then((res) => res.json())
-      .then((data) => {
-        // id 기반으로 이름 매핑 — 기기 사용자 전환과 무관하게 계좌 소유자를 정확히 표시
-        const myId = getCurrentUserId();
-        const savedMyName = localStorage.getItem("alien_my_name") || "나";
-        const savedPartnerName = localStorage.getItem("alien_partner_name") || "파트너";
-        const mappedUsers = (data.users || []).map((user: any) => {
-          // DB에 기본값("나"/"파트너")이 남아있는 경우: user.id로 누가 "나"인지 판별
-          if (user.name === "나" || user.name === "파트너") {
-            return { ...user, name: user.id === myId ? savedMyName : savedPartnerName };
-          }
-          return { ...user }; // DB에 실제 이름이 있으면 그대로 사용
-        });
-        setUsers([...mappedUsers, { id: 0, name: "공동" }]);
-
-  })
-  .catch(console.error);
-
-    fetchAccounts();
-
-    // Fetch all categories to build icon map (EXPENSE + INCOME + TRANSFER)
     const familyId = getCurrentFamilyId();
+    const familyCode = getCurrentFamilyCode();
+
+    // 5개 요청을 동시에 병렬 실행 → 응답속도 대폭 개선
     Promise.all([
+      fetch(`/api/transactions?familyId=${familyId}`).then(r => r.json()),
+      fetch(`/api/profile?code=${encodeURIComponent(familyCode)}`).then(r => r.json()),
+      fetch(`/api/accounts?familyId=${familyId}`).then(r => r.json()),
       fetch(`/api/categories?familyId=${familyId}&type=EXPENSE`).then(r => r.json()),
       fetch(`/api/categories?familyId=${familyId}&type=INCOME`).then(r => r.json()),
-    ]).then(([expCats, incCats]) => {
+    ]).then(([txData, profileData, accountData, expCats, incCats]) => {
+      // 거래내역
+      setTransactions(txData || []);
+
+      // 프로필(유저 목록)
+      const myId = getCurrentUserId();
+      const savedMyName = localStorage.getItem("alien_my_name") || "나";
+      const savedPartnerName = localStorage.getItem("alien_partner_name") || "파트너";
+      const mappedUsers = (profileData.users || []).map((user: any) => {
+        if (user.name === "나" || user.name === "파트너") {
+          return { ...user, name: user.id === myId ? savedMyName : savedPartnerName };
+        }
+        return { ...user };
+      });
+      setUsers([...mappedUsers, { id: 0, name: "공동" }]);
+
+      // 계좌 목록
+      const accountList = Array.isArray(accountData) ? accountData : accountData.accounts || [];
+      const sorted = accountList
+        .slice()
+        .sort((a: Account, b: Account) => (a.displayOrder || 0) - (b.displayOrder || 0));
+      setAccounts(sorted);
+
+      // 카테고리 아이콘 맵
       const all = [...(Array.isArray(expCats) ? expCats : []), ...(Array.isArray(incCats) ? incCats : [])];
       const iconMap: Record<string, string> = {};
-      all.forEach((cat: any) => {
-        if (cat.name && cat.icon) iconMap[cat.name] = cat.icon;
-      });
+      all.forEach((cat: any) => { if (cat.name && cat.icon) iconMap[cat.name] = cat.icon; });
       setDbCategoryIconMap(iconMap);
-    }).catch(() => {});
+    }).catch(console.error);
   }, []);
 
 const expenses = transactions.filter((tx) => tx.type === "EXPENSE");
@@ -623,6 +624,7 @@ const getPercent = (owner: string) => {
 
         {tab === "ASSET" && (
           <>
+<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
 <div style={assetHeaderStyle}>
   <strong style={{ fontSize: 15, fontWeight: 900, color: "#2D2545" }}>자산 목록</strong>
   <button
@@ -659,6 +661,7 @@ const getPercent = (owner: string) => {
       }}>{f}</button>
     );
   })}
+</div>
 </div>
 
             <AssetAccountGrid
@@ -742,10 +745,18 @@ const getPercent = (owner: string) => {
   const currentMonth = now.getMonth();
   const lastMonthDate = new Date(currentYear, currentMonth - 1, 1);
 
-  const totalAsset = accounts.reduce(
-    (sum, account) => sum + Number(account.balance || 0),
-    0
-  );
+  const totalAsset = accounts.reduce((sum, account) => {
+    // LOAN / CARD: 부채이므로 차감
+    if (account.type === "LOAN" || account.type === "CARD") {
+      return sum - Math.abs(Number(account.balance || 0));
+    }
+    // STOCK: 예수금 기준 (stockCash) — 평가금액은 별도 카드에서 표시
+    if (account.type === "STOCK") {
+      return sum + Number(account.stockCash || 0);
+    }
+    // 나머지 (BANK, CASH, SAVING, ETC): 잔액 그대로 합산
+    return sum + Number(account.balance || 0);
+  }, 0);
 
   const currentAssetRange = getCustomMonthRange(
   getBaseMonthByStartDay(new Date(), monthStartDay),
@@ -1374,7 +1385,7 @@ const tabButtonStyle = {
 const pageStyle = {
   minHeight: "100vh",
   background: "linear-gradient(160deg, #A78BFA28 0%, #A78BFA10 30%, #f8f6ff 65%, #ffffff 100%)",
-  padding: "0 0 90px",
+  padding: "0 0 calc(90px + env(safe-area-inset-bottom))",
   display: "flex",
   justifyContent: "center",
 } as const;
@@ -1988,12 +1999,4 @@ const backButtonStyle = {
   display: "grid",
   placeItems: "center",
   cursor: "pointer",
-} as const;
-
-export default function AnalysisPage() {
-  return (
-    <Suspense fallback={null}>
-      <AnalysisPageContent />
-    </Suspense>
-  );
-}
+} as const

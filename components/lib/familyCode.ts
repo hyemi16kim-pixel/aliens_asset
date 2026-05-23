@@ -66,3 +66,11 @@ export function getCurrentUserId(): number {
 export function setCurrentUserId(id: number) {
   localStorage.setItem(MY_USER_ID_KEY, String(id));
 }
+
+/** 저장된 가족코드 목록에서 특정 코드 삭제 (현재 사용 중인 코드는 삭제 불가) */
+export function removeFamilyCode(code: string): void {
+  const current = getCurrentFamilyCode();
+  if (code === current) return; // 현재 활성 코드는 삭제 안 함
+  const codes = getAllFamilyCodes().filter((c) => c.code !== code);
+  localStorage.setItem(FAMILY_CODES_KEY, JSON.stringify(codes));
+}

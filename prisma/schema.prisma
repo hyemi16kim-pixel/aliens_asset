@@ -37,8 +37,10 @@ model Family {
   id            Int      @id @default(autoincrement())
   code          String   @unique
   name          String
+  password      String?
   monthStartDay Int      @default(1)
   budgets       Json     @default("{}")
+  sharedMemo    String   @default("")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -99,6 +101,8 @@ model Account {
   fromTransactions Transaction[] @relation("FromAccount")
   toTransactions   Transaction[] @relation("ToAccount")
   accountAliases   AccountAlias[]
+
+  @@index([familyId])
 }
 
 model AccountAlias {
@@ -134,6 +138,9 @@ model Transaction {
   user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   fromAccount Account? @relation("FromAccount", fields: [fromAccountId], references: [id], onDelete: SetNull)
   toAccount   Account? @relation("ToAccount", fields: [toAccountId], references: [id], onDelete: SetNull)
+
+  @@index([familyId, transactionAt])
+  @@index([familyId])
 }
 
 model Goal {
@@ -150,6 +157,7 @@ model Goal {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
   periodType String   @default("ALWAYS")
+  isPinned   Boolean  @default(false)
 
 
   family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)

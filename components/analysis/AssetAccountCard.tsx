@@ -128,7 +128,7 @@ export default function AssetAccountCard({ account, users = [], onClick, onDoubl
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       style={{
-        width: "100%", height: 150, minHeight: 150,
+        width: "100%", minHeight: 148, height: "100%",
         border: "1px solid #E9DDFE",
         display: "flex", flexDirection: "column", justifyContent: "space-between",
         overflow: "hidden", borderRadius: 22,
@@ -137,26 +137,29 @@ export default function AssetAccountCard({ account, users = [], onClick, onDoubl
         boxShadow: "0 8px 20px rgba(167,139,250,0.12)", cursor: "pointer",
       }}
     >
-      {/* 상단: 이름 + 버튼 */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
-        <div style={titleRowStyle}>
-          <strong style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 90, display: "block" }}>
-            {iconMap[account.type] || "🛸"} {account.name}
-          </strong>
-          <span style={ownerInlineStyle}>{ownerName}</span>
-        </div>
-        <div style={{ display: "flex", flexDirection: "row", gap: 6, alignItems: "center", flexShrink: 0 }}>
+      {/* 상단: 소유자 pill + 버튼 */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <span style={ownerPillStyle}>{ownerName}</span>
+        <div style={{ display: "flex", flexDirection: "row", gap: 6, alignItems: "center" }}>
           <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onDetail(); }} style={iconButtonStyle}>
-            <ListFilter size={15} color={iconColor} />
+            <ListFilter size={14} color={iconColor} />
           </button>
           <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onPalette(); }} style={iconButtonStyle}>
-            <Palette size={15} color={iconColor} />
+            <Palette size={14} color={iconColor} />
           </button>
         </div>
       </div>
 
+      {/* 아이콘 + 계좌명 */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+        <span style={{ fontSize: 18 }}>{iconMap[account.type] || "🛸"}</span>
+        <strong style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+          {account.name}
+        </strong>
+      </div>
+
       {/* 메인 금액 */}
-      <div style={{ marginTop: 12, fontSize: 18, fontWeight: 800 }}>
+      <div style={{ fontSize: 17, fontWeight: 800 }}>
         {account.type === "STOCK"
           ? (stockLoading ? "로딩 중..." : money(stockSummary?.totalValue || 0))
           : account.type === "CARD"
@@ -213,6 +216,9 @@ const titleRowStyle = {
   minWidth: 0, overflow: "hidden", flex: 1,
 } as const;
 
-const ownerInlineStyle = {
+const ownerPillStyle = {
   fontSize: 10, color: "#8E8AA5", fontWeight: 700,
-} as const;
+  background: "rgba(255,255,255,0.65)",
+  border: "1px solid rgba(0,0,0,0.07)",
+  borderRadius: 999,
+  padding: "2px 8p

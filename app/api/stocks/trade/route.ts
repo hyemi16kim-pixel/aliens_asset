@@ -36,7 +36,6 @@ export async function POST(req: NextRequest) {
     const code = String(body.code || "").trim().toUpperCase();
     const quantity = Number(body.quantity || 0);
     const price = Number(body.price || 0);
-    const owner = body.owner || "공동";
     const transactionAt = body.transactionAt
       ? new Date(body.transactionAt)
       : new Date();
@@ -48,8 +47,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 계좌 소유자 정보 포함하여 조회
     const account = await prisma.account.findUnique({
       where: { id: accountId },
+      include: { owner: true },
     });
 
     if (!account || account.type !== "STOCK") {
@@ -58,6 +59,9 @@ export async function POST(req: NextRequest) {
         { status: 404 }
       );
     }
+
+    // 계좌 소유자가 있으면 그 이름을 사용, 없으면 공동
+    const owner = account.owner?.name || "공동";
 
     const tradeAmount = quantity * price;
     const currentStockCash = Number(account.stockCash || 0);
@@ -161,6 +165,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {
-    return NextResponse.json({ error: "주식 거래 저장 실패", detail: error.message }, { status: 500 });
+    return NextResponse.json({ error: "주식 거래 저장 실패", detail: (error as any).message }, { status: 500 });
   }
 }

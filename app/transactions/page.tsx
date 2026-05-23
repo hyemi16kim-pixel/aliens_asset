@@ -73,7 +73,7 @@ import { useSwipeNav } from "@/components/lib/useSwipeNav";
 
 type TransactionType = "INCOME" | "EXPENSE" | "TRANSFER";
 
-const FILTER_ORDER = ["CALENDAR", "ALL", "INCOME", "EXPENSE", "TRANSFER"] as const;
+const FILTER_ORDER = ["CALENDAR", "ALL", "INCOME", "EXPENSE", "TRANSFER", "STOCK"] as const;
 type FilterType = (typeof FILTER_ORDER)[number];
 type ViewMode = "LIST" | "CALENDAR";
 
@@ -177,6 +177,7 @@ const typeColorMap: Record<string, string> = {
   EXPENSE: "#FF6B81",
   INCOME: "#4CD6A5",
   TRANSFER: "#5BB8F5",
+  STOCK: "#F59E0B",
   ALL: theme.colors.primary,
   CALENDAR: theme.colors.primary,
 };
@@ -224,6 +225,10 @@ function TransactionsContent() {
   });
   const [ownerNames, setOwnerNames] = useState(["공동"]);
 
+  const [dayRange, setDayRange] = useState<number>(1);
+
+  const [dayDetailFilter, setDayDetailFilter] = useState<"ALL" | "INCOME" | "EXPENSE" | "TRANSFER" | "STOCK">("ALL");
+
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [editFromAccountId, setEditFromAccountId] = useState("");
   const [editToAccountId, setEditToAccountId] = useState("");
@@ -262,6 +267,8 @@ function TransactionsContent() {
   useEffect(() => {
     const accountId = searchParams.get("accountId");
     if (accountId) { setSelectedAccountId(accountId); setViewMode("LIST"); }
+    const view = searchParams.get("view");
+    if (view === "all") { setViewMode("LIST"); setFilterType("ALL"); }
   }, [searchParams]);
 
   useEffect(() => {
@@ -276,20 +283,46 @@ function TransactionsContent() {
   const monthRange = useMemo(() => getCustomMonthRange(month, monthStartDay), [month, monthStartDay]);
   const monthLabel = `${month.getFullYear()}년 ${month.getMonth() + 1}월`;
   const monthRangeLabel = formatMonthRangeLabel(monthRange.start, monthRange.end);
+
+  // 오늘 기준 dayRange 계산 — 월 이동 시 같은 날짜를 해당 월에 적용
+  const dayRangeAnchor = useMemo(() => {
+    const today = new Date();
+    const todayMonth = today.getFullYear() * 12 + today.getMonth();
+    const selMonth = month.getFullYear() * 12 + month.getMonth();
+    const monthsDiff = todayMonth - selMonth; // 몇 달 전인지
+    // 해당 월의 "오늘과 같은 날짜" (말일 초과 시 말일로 클램프)
+    const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+    const anchorDay = Math.min(today.getDate(), lastDay);
+    const end = new Date(month.getFullYear(), month.getMonth(), anchorDay, 23, 59, 59, 999);
+    const start = new Date(end);
+    start.setDate(start.getDate() - dayRange + 1);
+    start.setHours(0, 0, 0, 0);
+    const fmt = (d: Date) => `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
+    return { start, end, label: `${fmt(start)}~${fmt(end)}` };
+  }, [month, dayRange]);
   const hasActiveFilter = !!selectedType || !!selectedAccountId;
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter((tx: any) => {
-      const txDate = new Date(tx.transactionAt);
-      const sameMonth = isDateInRange(txDate, monthRange.start, monthRange.end);
-      const topTypeMatch = filterType === "CALENDAR" || filterType === "ALL" ? true : tx.type === filterType;
+      let inRange: boolean;
+      if (viewMode === "LIST") {
+        // LIST 뷰: 오늘 기준 dayRange, 월 이동 시 같은 날짜를 해당 월에 적용
+        const txDate = new Date(tx.transactionAt);
+        inRange = txDate >= dayRangeAnchor.start && txDate <= dayRangeAnchor.end;
+      } else {
+        // 달력 뷰: 선택된 월 범위 전체
+        inRange = isDateInRange(new Date(tx.transactionAt), monthRange.start, monthRange.end);
+      }
+      const topTypeMatch = filterType === "CALENDAR" || filterType === "ALL" ? true
+        : filterType === "STOCK" ? (tx.category?.includes("주식 매수") || tx.category?.includes("주식 매도"))
+        : tx.type === filterType;
       const modalTypeMatch = selectedType ? tx.type === selectedType : true;
       const accountMatch = selectedAccountId
         ? String(tx.fromAccountId) === selectedAccountId || String(tx.toAccountId) === selectedAccountId
         : true;
-      return sameMonth && topTypeMatch && modalTypeMatch && accountMatch;
+      return inRange && topTypeMatch && modalTypeMatch && accountMatch;
     });
-  }, [transactions, filterType, monthRange, selectedType, selectedAccountId]);
+  }, [transactions, filterType, viewMode, dayRange, monthRange, selectedType, selectedAccountId]);
 
   const calendarDays = useMemo(() => {
     const days: (Date | null)[] = [];
@@ -381,12 +414,14 @@ function TransactionsContent() {
   const moveMonth = (value: number) => {
     setMonth(new Date(month.getFullYear(), month.getMonth() + value, 1));
     setSelectedDay(null);
+    setDayDetailFilter("ALL");
   };
 
   const setTopFilter = (nextFilter: FilterType) => {
     setFilterType(nextFilter);
     setSelectedDay(null);
     setViewMode(nextFilter === "CALENDAR" ? "CALENDAR" : "LIST");
+
   };
 
   const moveFilter = (direction: "LEFT" | "RIGHT") => {
@@ -434,7 +469,7 @@ function TransactionsContent() {
       style={{
         minHeight: "100vh",
         background: `linear-gradient(160deg, ${activeColor}28 0%, ${activeColor}10 30%, #f8f6ff 65%, #ffffff 100%)`,
-        padding: "0 0 90px",
+        padding: "0 0 calc(90px + env(safe-area-inset-bottom))",
         display: "flex",
         justifyContent: "center",
         transition: "background 0.4s ease",
@@ -451,28 +486,19 @@ function TransactionsContent() {
             <ChevronLeft size={22} color="#2D2545" />
           </button>
           <strong style={{ fontSize: 17, fontWeight: 900, color: "#2D2545", letterSpacing: -0.5 }}>거래내역</strong>
-          <button
-            onClick={() => setShowFilterModal(true)}
-            style={{
-              width: 36, height: 36, borderRadius: "50%", border: "none", cursor: "pointer",
-              background: hasActiveFilter ? `${theme.colors.primary}18` : "#F0EBF9",
-              display: "grid", placeItems: "center",
-            }}
-          >
-            <SlidersHorizontal size={16} color={hasActiveFilter ? theme.colors.primary : "#A59DBD"} />
-          </button>
+          <div style={{ width: 36 }} />
         </div>
 
         {/* ── 필터 pills ── */}
-        <div style={{ display: "flex", gap: 8, padding: "0 18px 14px", overflowX: "auto" }}>
-          {(["CALENDAR", "ALL", "INCOME", "EXPENSE", "TRANSFER"] as const).map((f) => {
-            const labels: Record<string, string> = { CALENDAR: "📅 달력", ALL: "전체", INCOME: "수입", EXPENSE: "지출", TRANSFER: "이체" };
+        <div style={{ display: "flex", gap: 6, margin: "0 16px", paddingBottom: 14 }}>
+          {(["CALENDAR", "ALL", "INCOME", "EXPENSE", "TRANSFER", "STOCK"] as const).map((f) => {
+            const labels: Record<string, string> = { CALENDAR: "📅", ALL: "전체", INCOME: "수입", EXPENSE: "지출", TRANSFER: "이체", STOCK: "주식" };
             const color = typeColorMap[f];
             const active = filterType === f;
             return (
               <button key={f} onClick={() => setTopFilter(f)} style={{
-                flexShrink: 0, height: 34, padding: "0 14px", borderRadius: 999,
-                fontSize: 12, fontWeight: 800, cursor: "pointer",
+                flex: 1, height: 34, padding: 0, borderRadius: 999,
+                fontSize: 11, fontWeight: 800, cursor: "pointer",
                 border: active ? `1.5px solid ${color}` : "1.5px solid #E8E1F5",
                 background: active ? `${color}18` : "rgba(255,255,255,0.8)",
                 color: active ? color : "#A59DBD",
@@ -491,7 +517,7 @@ function TransactionsContent() {
             boxShadow: "0 6px 20px rgba(167,139,250,0.10)",
             padding: "14px 16px",
           }}>
-            {/* 월 이동 */}
+            {/* 월 이동 — LIST/CALENDAR 모두 표시 */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
               <button onClick={() => moveMonth(-1)} style={navBtnStyle}>
                 <ChevronLeft size={16} color="#A59DBD" />
@@ -505,13 +531,40 @@ function TransactionsContent() {
                 }}
               >
                 {monthLabel}
-                <span style={{ fontSize: 10, color: "#B0A8C8", fontWeight: 600 }}>{monthRangeLabel}</span>
+                <span style={{ fontSize: 10, color: "#B0A8C8", fontWeight: 600 }}>
+                  {viewMode === "LIST" ? dayRangeAnchor.label : monthRangeLabel}
+                </span>
                 <ChevronDown size={14} color="#B0A8C8" />
               </button>
               <button onClick={() => moveMonth(1)} style={navBtnStyle}>
                 <ChevronRight size={16} color="#A59DBD" />
               </button>
             </div>
+
+            {/* 날짜 범위 필터 칩 — LIST 뷰 전용, 카드 내 가운데 정렬 */}
+            {viewMode === "LIST" && (
+              <div style={{ display: "flex", justifyContent: "center", gap: 7, marginBottom: 12 }}>
+                {([1, 3, 7, 14, 30] as const).map((d) => {
+                  const active = dayRange === d;
+                  return (
+                    <button
+                      key={d}
+                      onClick={() => setDayRange(d)}
+                      style={{
+                        height: 28, padding: "0 12px", borderRadius: 999,
+                        fontSize: 12, fontWeight: 800, cursor: "pointer",
+                        border: active ? `1.5px solid ${activeColor}` : "1.5px solid #E8E1F5",
+                        background: active ? `${activeColor}18` : "#FAFAFF",
+                        color: active ? activeColor : "#A59DBD",
+                        transition: "all 0.18s",
+                      }}
+                    >
+                      {d}D
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {/* 수입/지출 요약 */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -567,7 +620,7 @@ function TransactionsContent() {
                     return (
                       <button
                         key={dayKey}
-                        onClick={() => setSelectedDay(activeDay ? null : dayKey)}
+                        onClick={() => { setSelectedDay(activeDay ? null : dayKey); setDayDetailFilter("ALL"); }}
                         style={{
                           width: "100%", minHeight: 62, padding: "4px 3px",
                           borderTop: "1px solid #F0EBF9", borderLeft: "none", borderRight: "none", borderBottom: "none",
@@ -605,39 +658,69 @@ function TransactionsContent() {
               </div>
 
               {/* 선택된 날짜 거래 */}
-              {selectedDay && (
-                <div style={{
-                  background: "white", borderRadius: 24,
-                  border: "1px solid #EDE6F9",
-                  boxShadow: "0 4px 16px rgba(167,139,250,0.08)",
-                  overflow: "hidden",
-                }}>
+              {selectedDay && (() => {
+                const visibleTxs = dayDetailFilter === "ALL"
+                  ? selectedDayTransactions
+                  : dayDetailFilter === "STOCK"
+                  ? selectedDayTransactions.filter((tx) => tx.category?.includes("주식 매수") || tx.category?.includes("주식 매도"))
+                  : selectedDayTransactions.filter((tx) => tx.type === dayDetailFilter);
+                const typeColors: Record<string, string> = { INCOME: "#4CD6A5", EXPENSE: "#FF6B81", TRANSFER: "#5BB8F5", STOCK: "#F59E0B" };
+                return (
                   <div style={{
-                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                    padding: "14px 18px 12px",
-                    borderBottom: selectedDayTransactions.length > 0 ? "1px solid #F0EBF9" : "none",
+                    background: "white", borderRadius: 24,
+                    border: "1px solid #EDE6F9",
+                    boxShadow: "0 4px 16px rgba(167,139,250,0.08)",
+                    overflow: "hidden",
                   }}>
-                    <strong style={{ fontSize: 14, fontWeight: 900, color: "#2D2545" }}>
-                      {selectedDay.slice(5, 7)}월 {selectedDay.slice(8, 10)}일 상세내역
-                    </strong>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: "#B0A8C8" }}>{selectedDayTransactions.length}건</span>
-                  </div>
-                  {selectedDayTransactions.length === 0 ? (
-                    <div style={{ padding: "24px", textAlign: "center", fontSize: 13, color: "#C4B8D8" }}>거래내역이 없습니다</div>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column" }}>
-                      {selectedDayTransactions.map((tx, i) => (
-                        <TxRow key={tx.id} tx={tx} serverCategories={serverCategories}
-                          getTypeColor={getTypeColor} formatAmount={formatAmount}
-                          getAccountText={getAccountText} formatDateShort={formatDateShort}
-                          onPress={() => openEditSheet(tx)}
-                          divider={i < selectedDayTransactions.length - 1}
-                        />
-                      ))}
+                    {/* 헤더 */}
+                    <div style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      padding: "14px 18px 10px",
+                    }}>
+                      <strong style={{ fontSize: 14, fontWeight: 900, color: "#2D2545" }}>
+                        {selectedDay.slice(5, 7)}월 {selectedDay.slice(8, 10)}일 상세내역
+                      </strong>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#B0A8C8" }}>{selectedDayTransactions.length}건</span>
                     </div>
-                  )}
-                </div>
-              )}
+
+                    {/* 타입 필터 칩 */}
+                    <div style={{ display: "flex", justifyContent: "center", gap: 6, padding: "0 18px 10px" }}>
+                      {(["ALL", "INCOME", "EXPENSE", "TRANSFER", "STOCK"] as const).map((f) => {
+                        const labels = { ALL: "전체", INCOME: "수입", EXPENSE: "지출", TRANSFER: "이체", STOCK: "주식" };
+                        const color = f === "ALL" ? theme.colors.primary : typeColors[f];
+                        const active = dayDetailFilter === f;
+                        return (
+                          <button key={f} onClick={() => setDayDetailFilter(f)} style={{
+                            height: 26, padding: "0 11px", borderRadius: 999,
+                            fontSize: 11, fontWeight: 800, cursor: "pointer",
+                            border: active ? `1.5px solid ${color}` : "1.5px solid #E8E1F5",
+                            background: active ? `${color}18` : "#FAFAFF",
+                            color: active ? color : "#B0A8C8",
+                            transition: "all 0.15s",
+                          }}>{labels[f]}</button>
+                        );
+                      })}
+                    </div>
+
+                    <div style={{ borderTop: "1px solid #F0EBF9" }} />
+
+                    {visibleTxs.length === 0 ? (
+                      <div style={{ padding: "24px", textAlign: "center", fontSize: 13, color: "#C4B8D8" }}>거래내역이 없습니다</div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        {visibleTxs.map((tx, i) => (
+                          <TxRow key={tx.id} tx={tx} serverCategories={serverCategories}
+                            getTypeColor={getTypeColor} formatAmount={formatAmount}
+                            getAccountText={getAccountText} formatDateShort={formatDateShort}
+                            onPress={() => openEditSheet(tx)}
+                            divider={i < visibleTxs.length - 1}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </>
           ) : (
             /* 리스트 뷰 */
@@ -821,133 +904,4 @@ function TxRow({
   divider?: boolean;
   showDate?: boolean;
 }) {
-  const iconData = getIconData(tx.category, serverCategories, tx.type);
-  const Icon = iconData.icon;
-  const color = getTypeColor(tx.type);
-
-  return (
-    <div
-      onClick={onPress}
-      style={{
-        display: "flex", alignItems: "center", gap: 12,
-        padding: "13px 18px",
-        borderBottom: divider ? "1px solid #F5F1FC" : "none",
-        cursor: "pointer",
-        background: "white",
-        transition: "background 0.15s",
-      }}
-    >
-      {/* 아이콘 */}
-      <div style={{
-        width: 44, height: 44, borderRadius: 16,
-        background: iconData.bg, display: "grid", placeItems: "center", flexShrink: 0,
-      }}>
-        <Icon size={20} color={color} />
-      </div>
-
-      {/* 텍스트 */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 900, color: "#2D2545", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {tx.category === "자산 수정"
-            ? "자산 수정"
-            : `${mapOwnerName(tx.owner)} · ${tx.category || (tx.type === "TRANSFER" ? "이체" : tx.type === "INCOME" ? "수입" : "지출")}`}
-        </div>
-        <div style={{ fontSize: 11, color: "#B0A8C8", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {getAccountText(tx)}
-        </div>
-        {tx.memo && (
-          <div style={{ fontSize: 11, color: "#C4B8D8", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {tx.memo}
-          </div>
-        )}
-      </div>
-
-      {/* 금액 */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
-        {showDate && <span style={{ fontSize: 11, fontWeight: 700, color: "#C4B8D8" }}>{formatDateShort(tx.transactionAt)}</span>}
-        <strong style={{ fontSize: 14, fontWeight: 900, color, lineHeight: 1.1 }}>{formatAmount(tx)}</strong>
-      </div>
-    </div>
-  );
-}
-
-/* ─── 스타일 상수 ────────────────────────────────────────── */
-const navBtnStyle = {
-  width: 36, height: 38, borderRadius: 12,
-  border: "1px solid #EDE6F9", background: "#FAFAFF",
-  display: "grid", placeItems: "center", cursor: "pointer",
-} as const;
-
-const overlayStyle = {
-  position: "fixed", inset: 0,
-  background: "rgba(45,37,69,0.35)",
-  display: "flex", alignItems: "flex-end", justifyContent: "center",
-  zIndex: 1000, backdropFilter: "blur(2px)",
-} as const;
-
-const sheetStyle = {
-  width: "100%", maxWidth: 390,
-  background: "white",
-  borderRadius: "28px 28px 0 0",
-  padding: "0 20px 40px",
-  boxShadow: "0 -8px 40px rgba(124,92,255,0.15)",
-} as const;
-
-const sheetHandleStyle = {
-  width: 40, height: 4, borderRadius: 2, background: "#E0D9F5",
-  margin: "14px auto 0",
-} as const;
-
-const sheetHeaderStyle = {
-  display: "flex", justifyContent: "space-between", alignItems: "center",
-  padding: "16px 0 14px",
-} as const;
-
-const iconBtnStyle = {
-  border: "none", background: "transparent", cursor: "pointer", padding: 4, display: "grid", placeItems: "center",
-} as const;
-
-const sheetLabelStyle = {
-  display: "block", fontSize: 11, fontWeight: 800, color: "#B0A8C8",
-  margin: "14px 0 6px", textTransform: "uppercase" as const, letterSpacing: 0.5,
-} as const;
-
-const sheetInputStyle = {
-  width: "100%", height: 48,
-  borderRadius: 16, border: "1.5px solid #EDE6F9",
-  padding: "0 14px", fontSize: 14, fontWeight: 700, color: "#2D2545",
-  outline: "none", background: "#FAFAFF", boxSizing: "border-box" as const,
-} as const;
-
-const resetBtnStyle = {
-  height: 52, border: "none", borderRadius: 18,
-  background: "#FFF3F6", color: "#FF6B81",
-  fontWeight: 900, fontSize: 14, cursor: "pointer",
-  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-} as const;
-
-const applyBtnStyle = {
-  height: 52, border: "none", borderRadius: 18,
-  background: `linear-gradient(135deg, ${theme.colors.primary} 0%, #A992FF 100%)`,
-  color: "white", fontWeight: 900,
-  cursor: "pointer",
-  fontSize: 15,
-} as const;
-
-const accountFilterLabelStyle = {
-  fontSize: 11,
-  color: theme.colors.primary,
-  fontWeight: 700,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-} as const;
-
-export default function TransactionsPage() {
-
-  return (
-    <Suspense fallback={null}>
-      <TransactionsContent />
-    </Suspense>
-  );
-}
+  const iconData = getIconData(tx.c

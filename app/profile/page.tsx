@@ -13,6 +13,7 @@ import {
   getAllFamilyCodes,
   setCurrentFamily,
   hasFamilyCode,
+  removeFamilyCode,
   type FamilyEntry,
 } from "@/components/lib/familyCode";
 import {
@@ -71,16 +72,13 @@ type ProfileData = {
   goalPercent: number;
 };
 
-type MenuKey = "family" | "category" | "month" | "account" | "alert" | "security" | "app" | "familycode";
+type MenuKey = "family" | "category" | "month" | "account" | "alert" | "security" | "app" | "familycode" | "family_all" | "budget_all" | "settings_all" | "danger";
 
-const menuItems: { key: MenuKey; icon: React.ReactNode; label: string }[] = [
-  { key: "familycode", icon: <Shield size={18} />, label: "가족코드 관리" },
-  { key: "family", icon: <Users size={18} />, label: "가족 관리" },
-  { key: "category", icon: <Wallet size={18} />, label: "카테고리 관리" },
-  { key: "month", icon: <CalendarDays size={18} />, label: "월 예산 설정" },
-  { key: "alert", icon: <Bell size={18} />, label: "알림 설정" },
-  { key: "security", icon: <Shield size={18} />, label: "보안 설정" },
-  { key: "app", icon: <Settings size={18} />, label: "앱 설정" },
+const menuItems: { key: MenuKey; icon: React.ReactNode; label: string; desc: string }[] = [
+  { key: "family_all", icon: <Users size={18} />, label: "가족 관리", desc: "가족코드 · 구성원 · 보안" },
+  { key: "budget_all", icon: <Wallet size={18} />, label: "가계부 설정", desc: "카테고리 · 월 예산 · 시작일" },
+  { key: "settings_all", icon: <Settings size={18} />, label: "앱 설정", desc: "알림 · 앱 정보" },
+  { key: "danger", icon: <Shield size={18} />, label: "위험 구역", desc: "데이터 초기화" },
 ];
 
 const colorOptions = [
@@ -249,22 +247,28 @@ export default function ProfilePage() {
           {menuItems.map((item, i) => (
             <button
               key={item.key}
-              onClick={() =>
-                item.key === "family" ? openFamilyMenu() : setActiveMenu(item.key)
-              }
+              onClick={() => setActiveMenu(item.key)}
               style={{
                 ...menuItemStyle,
                 borderBottom:
                   i !== menuItems.length - 1
                     ? `1px solid ${theme.colors.border}`
                     : "none",
+                background: item.key === "danger" ? "#FFF8F8" : "white",
               }}
             >
               <div style={menuLeftStyle}>
-                <div style={menuIconStyle}>{item.icon}</div>
-                {item.label}
+                <div style={{
+                  ...menuIconStyle,
+                  background: item.key === "danger" ? "#FFE8E8" : theme.colors.primarySoft,
+                  color: item.key === "danger" ? "#E53935" : theme.colors.primary,
+                }}>{item.icon}</div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: item.key === "danger" ? "#E53935" : theme.colors.text }}>{item.label}</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: theme.colors.subtext }}>{item.desc}</span>
+                </div>
               </div>
-              <ChevronRight size={18} color={theme.colors.subtext} />
+              <ChevronRight size={18} color={item.key === "danger" ? "#E5393580" : theme.colors.subtext} />
             </button>
           ))}
         </section>
@@ -292,6 +296,7 @@ export default function ProfilePage() {
               familyNameSetting={familyNameSetting}
               myNameSetting={myNameSetting}
               partnerNameSetting={partnerNameSetting}
+              familyId={getCurrentFamilyId()}
               currentCode={currentCode}
               familyCodes={familyCodes}
               onSaveNames={async (familyName, myName, partnerName, myColorVal, partnerColorVal) => {
@@ -360,6 +365,10 @@ export default function ProfilePage() {
                 setActiveMenu(null);
                 router.replace("/");
               }}
+              onFamilyCodeRemove={(code) => {
+                removeFamilyCode(code);
+                refreshFamilyCodeState();
+              }}
               onFamilyCodeAdd={async (newCode) => {
                 const trimmed = newCode.trim().toUpperCase();
                 if (!trimmed) return;
@@ -394,10 +403,12 @@ function SheetContent({
   familyNameSetting,
   myNameSetting,
   partnerNameSetting,
+  familyId,
   currentCode,
   familyCodes,
   onSaveNames,
   onFamilyCodeSwitch,
+  onFamilyCodeRemove,
   onFamilyCodeAdd,
   ownerUser,
   partnerUser,
@@ -413,22 +424,59 @@ function SheetContent({
   familyNameSetting: string;
   myNameSetting: string;
   partnerNameSetting: string;
+  familyId: number;
   currentCode: string;
   familyCodes: FamilyEntry[];
   onSaveNames: (familyName: string, myName: string, partnerName: string, ownerColor: string, partnerColor: string) => Promise<void>;
   onFamilyCodeSwitch: (entry: FamilyEntry) => void;
+  onFamilyCodeRemove: (code: string) => void;
   onFamilyCodeAdd: (code: string) => Promise<void>;
   ownerUser?: { id: number; name: string; color?: string } | null;
   partnerUser?: { id: number; name: string; color?: string } | null;
   myUserId?: number | null;
   onSwitchUser?: (user: { id: number; name: string; color?: string }) => void;
 }) {
+if (menu === "family_all") {
+  return (
+    <FamilyAllSheet
+      profile={profile}
+      familyNameSetting={familyNameSetting}
+      myNameSetting={myNameSetting}
+      partnerNameSetting={partnerNameSetting}
+      myColor={myColor}
+      partnerColor={partnerColor}
+      setMyColor={setMyColor}
+      setPartnerColor={setPartnerColor}
+      onSaveNames={onSaveNames}
+      currentCode={currentCode}
+      familyCodes={familyCodes}
+      onFamilyCodeSwitch={onFamilyCodeSwitch}
+      onFamilyCodeRemove={onFamilyCodeRemove}
+      onFamilyCodeAdd={onFamilyCodeAdd}
+      ownerUser={ownerUser}
+      partnerUser={partnerUser}
+      myUserId={myUserId}
+      onSwitchUser={onSwitchUser}
+      familyId={familyId}
+    />
+  );
+}
+
+if (menu === "budget_all") {
+  return <BudgetAllSheet />;
+}
+
+if (menu === "settings_all") {
+  return <SettingsAllSheet familyId={familyId} />;
+}
+
 if (menu === "familycode") {
   return (
     <FamilyCodeSheet
       currentCode={currentCode}
       familyCodes={familyCodes}
       onSwitch={onFamilyCodeSwitch}
+      onRemove={onFamilyCodeRemove}
       onAdd={onFamilyCodeAdd}
     />
   );
@@ -477,12 +525,11 @@ if (menu === "account") {
   }
 
   if (menu === "security") {
-    return (
-      <div style={sheetBodyStyle}>
-        <ToggleRow label="앱 잠금" />
-        <ToggleRow label="가족 코드 숨기기" />
-      </div>
-    );
+    return <SecuritySheet familyId={familyId} />;
+  }
+
+  if (menu === "danger") {
+    return <DangerSheet familyId={familyId} currentCode={currentCode} />;
   }
 
   return (
@@ -1456,6 +1503,10 @@ function ToggleRow({ label }: { label: string }) {
 }
 
 function getMenuTitle(menu: MenuKey) {
+  if (menu === "family_all") return "가족 관리";
+  if (menu === "budget_all") return "가계부 설정";
+  if (menu === "settings_all") return "앱 설정";
+  if (menu === "danger") return "위험 구역";
   if (menu === "familycode") return "가족코드 관리";
   if (menu === "family") return "가족 관리";
   if (menu === "alert") return "알림 설정";
@@ -1468,11 +1519,13 @@ function FamilyCodeSheet({
   currentCode,
   familyCodes,
   onSwitch,
+  onRemove,
   onAdd,
 }: {
   currentCode: string;
   familyCodes: FamilyEntry[];
   onSwitch: (entry: FamilyEntry) => void;
+  onRemove: (code: string) => void;
   onAdd: (code: string) => Promise<void>;
 }) {
   const [newCode, setNewCode] = useState("");
@@ -1523,28 +1576,60 @@ function FamilyCodeSheet({
           {familyCodes
             .filter((e) => e.code !== currentCode)
             .map((entry) => (
-              <button
+              <div
                 key={entry.code}
-                onClick={() => onSwitch(entry)}
                 style={{
                   width: "100%",
-                  padding: "12px 16px",
+                  padding: "10px 14px",
                   borderRadius: 14,
                   background: "#FFFFFF",
                   border: `1px solid ${theme.colors.border}`,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  cursor: "pointer",
                   marginBottom: 8,
-                  transition: "all 0.2s",
                 }}
               >
-                <span style={{ fontWeight: 800, fontSize: 14, color: theme.colors.text, letterSpacing: 0.5 }}>
+                <span style={{ fontWeight: 800, fontSize: 14, color: theme.colors.text, letterSpacing: 0.5, flex: 1 }}>
                   {entry.code}
                 </span>
-                <span style={{ fontSize: 11, color: theme.colors.primary, fontWeight: 700 }}>전환 →</span>
-              </button>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <button
+                    onClick={() => onSwitch(entry)}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 10,
+                      border: `1.5px solid ${theme.colors.primary}`,
+                      background: theme.colors.primarySoft,
+                      color: theme.colors.primary,
+                      fontWeight: 700,
+                      fontSize: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    전환 →
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm("'" + entry.code + "' 코드를 삭제할까요?")) {
+                        onRemove(entry.code);
+                      }
+                    }}
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: 10,
+                      border: "1.5px solid #FFCDD2",
+                      background: "#FFF5F5",
+                      color: "#E53935",
+                      fontWeight: 700,
+                      fontSize: 13,
+                      cursor: "pointer",
+                    }}
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
             ))}
         </div>
       )}
@@ -1655,3 +1740,480 @@ const budgetTotalBoxStyle = { minHeight: 46, borderRadius: 16, background: theme
 const sheetLabelStyle = { fontSize: 13, fontWeight: 900, color: theme.colors.subtext, marginBottom: -2 } as const;
 const sheetInputStyle = { width: "100%", height: 48, borderRadius: 16, border: `1px solid ${theme.colors.border}`, padding: "0 14px", fontSize: 15, fontWeight: 800, outline: "none", background: "#FFFFFF", boxSizing: "border-box" as const } as const;
 const secondaryButtonStyle = { height: 52, border: `1px solid ${theme.colors.border}`, borderRadius: 18, background: "#FFFFFF", color: theme.colors.text, fontWeight: 900 } as const;
+
+/* ─── SecuritySheet: 가족코드 비밀번호 관리 ─────────────── */
+function SecuritySheet({ familyId }: { familyId: number }) {
+  const [hasPassword, setHasPassword] = useState<boolean | null>(null);
+  const [mode, setMode] = useState<"view" | "set" | "remove">("view");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    fetch(`/api/family/password?familyId=${familyId}`)
+      .then((r) => r.json())
+      .then((d) => setHasPassword(!!d.hasPassword))
+      .catch(() => setHasPassword(false));
+  }, [familyId]);
+
+  const reset = () => {
+    setNewPassword(""); setConfirmPassword(""); setCurrentPassword("");
+    setError(""); setSuccess(""); setMode("view");
+  };
+
+  const handleSet = async () => {
+    if (!newPassword.trim()) { setError("새 비밀번호를 입력해주세요."); return; }
+    if (newPassword !== confirmPassword) { setError("비밀번호가 일치하지 않습니다."); return; }
+    if (hasPassword) {
+      if (!currentPassword.trim()) { setError("현재 비밀번호를 입력해주세요."); return; }
+      const checkRes = await fetch("/api/family/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ familyId, action: "check", password: currentPassword }),
+      });
+      const checkData = await checkRes.json();
+      if (!checkData.ok) { setError("현재 비밀번호가 올바르지 않습니다."); return; }
+    }
+    setLoading(true); setError("");
+    try {
+      const res = await fetch("/api/family/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ familyId, action: "set", password: newPassword }),
+      });
+      if (!res.ok) throw new Error("저장 실패");
+      setHasPassword(true);
+      setSuccess("비밀번호가 설정되었습니다.");
+      setTimeout(reset, 1500);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    if (!currentPassword.trim()) { setError("현재 비밀번호를 입력해주세요."); return; }
+    setLoading(true); setError("");
+    try {
+      const checkRes = await fetch("/api/family/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ familyId, action: "check", password: currentPassword }),
+      });
+      const checkData = await checkRes.json();
+      if (!checkData.ok) { setError("비밀번호가 올바르지 않습니다."); setLoading(false); return; }
+
+      const res = await fetch("/api/family/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ familyId, action: "remove" }),
+      });
+      if (!res.ok) throw new Error("삭제 실패");
+      setHasPassword(false);
+      setSuccess("비밀번호가 삭제되었습니다.");
+      setTimeout(reset, 1500);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (hasPassword === null) {
+    return <div style={{ padding: "32px 20px", textAlign: "center", color: "#B0A8C8" }}>Loading...</div>;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "16px 20px" }}>
+      <div style={{
+        borderRadius: 18, border: "1.5px solid #EDE6F9",
+        background: hasPassword ? "#F4EFFE" : "#FAFAFF",
+        padding: "16px 18px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+      }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 900, color: "#2D2545" }}>
+            {hasPassword ? "🔒 비밀번호 설정됨" : "🔓 비밀번호 없음"}
+          </div>
+          <div style={{ fontSize: 12, color: "#B0A8C8", marginTop: 4 }}>
+            {hasPassword
+              ? "가족코드 입력 시 비밀번호 확인이 필요합니다"
+              : "누구나 코드만으로 입장할 수 있습니다"}
+          </div>
+        </div>
+      </div>
+
+      {success && (
+        <div style={{ borderRadius: 14, background: "#ECFFF6", padding: "12px 16px", fontSize: 13, fontWeight: 700, color: "#10B981" }}>
+          {success}
+        </div>
+      )}
+
+      {mode === "view" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button
+            onClick={() => { setMode("set"); setError(""); }}
+            style={{
+              height: 52, borderRadius: 16, border: "none", cursor: "pointer",
+              background: "linear-gradient(135deg, #A78BFA 0%, #7C5CFC 100%)",
+              color: "white", fontSize: 14, fontWeight: 900,
+            }}
+          >
+            {hasPassword ? "🔑 비밀번호 변경" : "🔑 비밀번호 설정"}
+          </button>
+          {hasPassword && (
+            <button
+              onClick={() => { setMode("remove"); setError(""); }}
+              style={{
+                height: 52, borderRadius: 16, border: "1.5px solid #FFB3C1",
+                background: "#FFF3F6", color: "#FF6B81", fontSize: 14, fontWeight: 900, cursor: "pointer",
+              }}
+            >
+              비밀번호 삭제
+            </button>
+          )}
+        </div>
+      )}
+
+      {mode === "set" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {hasPassword && (
+            <>
+              <label style={{ fontSize: 12, fontWeight: 800, color: "#B0A8C8" }}>현재 비밀번호</label>
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="현재 비밀번호"
+                style={secInputStyle}
+              />
+            </>
+          )}
+          <label style={{ fontSize: 12, fontWeight: 800, color: "#B0A8C8" }}>새 비밀번호</label>
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="새 비밀번호"
+            style={secInputStyle}
+          />
+          <label style={{ fontSize: 12, fontWeight: 800, color: "#B0A8C8" }}>비밀번호 확인</label>
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="비밀번호 재입력"
+            style={secInputStyle}
+            onKeyDown={(e) => e.key === "Enter" && handleSet()}
+          />
+          {error && <p style={{ fontSize: 12, color: "#FF6B81", margin: 0, fontWeight: 600 }}>{error}</p>}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
+            <button onClick={reset} style={secCancelBtnStyle}>취소</button>
+            <button onClick={handleSet} disabled={loading} style={secConfirmBtnStyle}>
+              {loading ? "저장 중..." : "저장"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode === "remove" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <label style={{ fontSize: 12, fontWeight: 800, color: "#B0A8C8" }}>현재 비밀번호 확인</label>
+          <input
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            placeholder="현재 비밀번호"
+            style={secInputStyle}
+            onKeyDown={(e) => e.key === "Enter" && handleRemove()}
+          />
+          {error && <p style={{ fontSize: 12, color: "#FF6B81", margin: 0, fontWeight: 600 }}>{error}</p>}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
+            <button onClick={reset} style={secCancelBtnStyle}>취소</button>
+            <button onClick={handleRemove} disabled={loading} style={{ ...secConfirmBtnStyle, background: "#FF6B81" }}>
+              {loading ? "삭제 중..." : "삭제"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const secInputStyle = {
+  width: "100%", height: 48, borderRadius: 14,
+  border: "1.5px solid #EDE6F9", padding: "0 14px",
+  fontSize: 15, fontWeight: 700, color: "#2D2545",
+  outline: "none", background: "#FAFAFF", boxSizing: "border-box" as const,
+} as const;
+
+const secCancelBtnStyle = {
+  height: 48, borderRadius: 14, border: "1.5px solid #EDE6F9",
+  background: "#FAFAFF", color: "#B0A8C8", fontSize: 14, fontWeight: 800, cursor: "pointer",
+} as const;
+
+const secConfirmBtnStyle = {
+  height: 48, borderRadius: 14, border: "none",
+  background: "linear-gradient(135deg, #A78BFA 0%, #7C5CFC 100%)",
+  color: "white", fontSize: 14, fontWeight: 900, cursor: "pointer",
+} as const;
+
+
+/* ─── FamilyAllSheet: 가족코드 + 가족 관리 탭 ─────────── */
+type FamilyAllSheetProps = {
+  profile: ProfileData | null;
+  familyNameSetting: string;
+  myNameSetting: string;
+  partnerNameSetting: string;
+  myColor: string;
+  partnerColor: string;
+  setMyColor: (c: string) => void;
+  setPartnerColor: (c: string) => void;
+  onSaveNames: (familyName: string, myName: string, partnerName: string, ownerColor: string, partnerColor: string) => Promise<void>;
+  currentCode: string;
+  familyCodes: FamilyEntry[];
+  onFamilyCodeSwitch: (entry: FamilyEntry) => void;
+  onFamilyCodeRemove: (code: string) => void;
+  onFamilyCodeAdd: (code: string) => Promise<void>;
+  ownerUser?: { id: number; name: string; color?: string } | null;
+  partnerUser?: { id: number; name: string; color?: string } | null;
+  myUserId?: number | null;
+  onSwitchUser?: (user: { id: number; name: string; color?: string }) => void;
+  familyId: number;
+};
+function FamilyAllSheet(props: FamilyAllSheetProps) {
+  const [tab, setTab] = useState<"familycode" | "family" | "security">("familycode");
+  return (
+    <div>
+      <div style={compositeTabRowStyle}>
+        <button onClick={() => setTab("familycode")} style={tab === "familycode" ? compositeTabActiveStyle : compositeTabStyle}>
+          🔑 가족코드
+        </button>
+        <button onClick={() => setTab("family")} style={tab === "family" ? compositeTabActiveStyle : compositeTabStyle}>
+          👥 구성원
+        </button>
+        <button onClick={() => setTab("security")} style={tab === "security" ? compositeTabActiveStyle : compositeTabStyle}>
+          🔒 보안
+        </button>
+      </div>
+      {tab === "familycode" && (
+        <FamilyCodeSheet
+          currentCode={props.currentCode}
+          familyCodes={props.familyCodes}
+          onSwitch={props.onFamilyCodeSwitch}
+          onRemove={props.onFamilyCodeRemove}
+          onAdd={props.onFamilyCodeAdd}
+        />
+      )}
+      {tab === "family" && (
+        <FamilySheet
+          profile={props.profile}
+          familyNameSetting={props.familyNameSetting}
+          myNameSetting={props.myNameSetting}
+          partnerNameSetting={props.partnerNameSetting}
+          myColor={props.myColor}
+          partnerColor={props.partnerColor}
+          setMyColor={props.setMyColor}
+          setPartnerColor={props.setPartnerColor}
+          onSaveNames={props.onSaveNames}
+          ownerUser={props.ownerUser}
+          partnerUser={props.partnerUser}
+          myUserId={props.myUserId}
+          onSwitchUser={props.onSwitchUser}
+        />
+      )}
+      {tab === "security" && <SecuritySheet familyId={props.familyId} />}
+    </div>
+  );
+}
+
+/* ─── BudgetAllSheet: 카테고리 + 월예산 탭 ──────────────── */
+function BudgetAllSheet() {
+  const [tab, setTab] = useState<"category" | "month">("category");
+  return (
+    <div>
+      <div style={compositeTabRowStyle}>
+        <button onClick={() => setTab("category")} style={tab === "category" ? compositeTabActiveStyle : compositeTabStyle}>
+          🏷️ 카테고리
+        </button>
+        <button onClick={() => setTab("month")} style={tab === "month" ? compositeTabActiveStyle : compositeTabStyle}>
+          📅 월 예산
+        </button>
+      </div>
+      {tab === "category" && <CategorySheet />}
+      {tab === "month" && <MonthSheet />}
+    </div>
+  );
+}
+
+/* ─── SettingsAllSheet: 알림 + 보안 + 앱정보 탭 ─────────── */
+function SettingsAllSheet({ familyId }: { familyId: number }) {
+  const [tab, setTab] = useState<"alert" | "app">("alert");
+  return (
+    <div>
+      <div style={compositeTabRowStyle}>
+        <button onClick={() => setTab("alert")} style={tab === "alert" ? compositeTabActiveStyle : compositeTabStyle}>
+          🔔 알림
+        </button>
+        <button onClick={() => setTab("app")} style={tab === "app" ? compositeTabActiveStyle : compositeTabStyle}>
+          앱 정보
+        </button>
+      </div>
+      {tab === "alert" && (
+        <div style={sheetBodyStyle}>
+          <ToggleRow label="월 예산 초과 알림" />
+          <ToggleRow label="목표 달성 알림" />
+          <ToggleRow label="반복 거래 알림" />
+        </div>
+      )}
+      {tab === "app" && (
+        <div style={sheetBodyStyle}>
+          <div style={infoRowStyle}>
+            <span>테마</span>
+            <strong>Alien Pastel</strong>
+          </div>
+          <div style={infoRowStyle}>
+            <span>버전</span>
+            <strong>0.1.0</strong>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const compositeTabRowStyle = {
+  display: "flex",
+  gap: 8,
+  padding: "14px 16px 0",
+  borderBottom: "1px solid #EDE6F9",
+} as const;
+
+const compositeTabStyle = {
+  flex: 1,
+  height: 36,
+  borderTop: "none",
+  borderLeft: "none",
+  borderRight: "none",
+  borderBottom: "2.5px solid transparent",
+  background: "transparent",
+  borderRadius: "10px 10px 0 0",
+  fontSize: 12,
+  fontWeight: 700,
+  color: "#B0A8C8",
+  cursor: "pointer",
+  paddingBottom: 8,
+} as const;
+
+const compositeTabActiveStyle = {
+  ...compositeTabStyle,
+  color: "#7C5CFF",
+  fontWeight: 900,
+  borderBottom: "2.5px solid #7C5CFF",
+} as const;
+
+/* DangerSheet */
+function DangerSheet({ familyId, currentCode }: { familyId: number; currentCode: string }) {
+  const router = useRouter();
+  const [confirmInput, setConfirmInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleReset() {
+    const trimmed = confirmInput.trim().toUpperCase();
+    if (trimmed !== currentCode.toUpperCase()) {
+      setError("가족코드가 일치하지 않습니다.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(
+        "/api/family/reset?familyId=" + familyId + "&confirmCode=" + encodeURIComponent(trimmed),
+        { method: "DELETE" }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "삭제 실패");
+        return;
+      }
+      localStorage.removeItem("alien_family_codes");
+      localStorage.removeItem("alien_current_family");
+      alert("모든 데이터가 삭제되었습니다.");
+      router.replace("/setup");
+    } catch {
+      setError("네트워크 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={sheetBodyStyle}>
+      <div style={{ padding: "16px", borderRadius: 16, background: "#FFF5F5", border: "1.5px solid #FFCDD2", marginBottom: 24 }}>
+        <div style={{ fontSize: 18, marginBottom: 6 }}>{"⚠️"} 주의</div>
+        <div style={{ fontSize: 13, color: "#C62828", fontWeight: 700, lineHeight: 1.6 }}>
+          이 작업은 <strong>되돌릴 수 없습니다.</strong>
+        </div>
+        <div style={{ fontSize: 12, color: "#E53935", marginTop: 6, lineHeight: 1.6 }}>
+          가족의 모든 거래내역, 계좌, 사용자 정보가<br />
+          DB에서 영구 삭제됩니다.
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 11, color: "#999", fontWeight: 700, marginBottom: 8 }}>삭제되는 항목</div>
+        {["모든 거래내역", "모든 계좌 (은행/증권/카드/대출)", "주식 보유 종목", "가족 구성원 정보", "가족 데이터 전체"].map((item) => (
+          <div key={item} style={{ fontSize: 13, color: "#E53935", marginBottom: 4, display: "flex", gap: 6, alignItems: "center" }}>
+            <span>{"✕"}</span>
+            <span>{item}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 12, color: "#888", fontWeight: 700, marginBottom: 8 }}>
+          확인을 위해 현재 가족코드를 입력하세요
+        </div>
+        <div style={{ padding: "10px 14px", borderRadius: 12, background: "#F5F5F5", fontSize: 13, color: "#999", marginBottom: 10, letterSpacing: 1, fontWeight: 700 }}>
+          {currentCode || "—"}
+        </div>
+        <input
+          type="text"
+          value={confirmInput}
+          onChange={(e) => { setConfirmInput(e.target.value.toUpperCase()); setError(""); }}
+          placeholder="가족코드 입력"
+          style={{
+            ...sheetInputStyle,
+            width: "100%",
+            letterSpacing: 1,
+        border: confirmInput && confirmInput.toUpperCase() !== currentCode.toUpperCase()
+              ? "1.5px solid #E53935"
+              : sheetInputStyle.border,
+          }}
+        />
+        {error && (
+          <div style={{ fontSize: 12, color: "#E53935", marginTop: 6, fontWeight: 700 }}>{error}</div>
+        )}
+      </div>
+
+      <button
+        onClick={handleReset}
+        disabled={loading || !confirmInput}
+        style={{
+          width: "100%", height: 52, borderRadius: 16, border: "none",
+          background: loading || !confirmInput ? "#FFCDD2" : "#E53935",
+          color: "#FFFFFF", fontWeight: 900, fontSize: 15,
+          cursor: loading || !confirmInput ? "not-allowed" : "pointer",
+          transition: "all 0.2s",
+        }}
+      >
+        {loading ? "삭제 중..." : "모든 데이터 영구 삭제"}
+      </button>
+    </div>
+  );
+}

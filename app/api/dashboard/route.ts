@@ -78,6 +78,8 @@ export async function GET(req: NextRequest) {
       recentTransactions,
       summaryTransactions,
       previousTransactions,
+      familyUsers,
+      ownerExpenseTx,
     ] = await Promise.all([
       prisma.account.findMany({
         where: familyWhere,
@@ -93,13 +95,18 @@ export async function GET(req: NextRequest) {
 
       prisma.transaction.findMany({
         where: familyWhere,
-        include: {
-          fromAccount: {
-            select: { id: true, name: true, type: true },
-          },
-          toAccount: {
-            select: { id: true, name: true, type: true },
-          },
+        select: {
+          id: true,
+          type: true,
+          amount: true,
+          category: true,
+          owner: true,
+          memo: true,
+          transactionAt: true,
+          fromAccountId: true,
+          toAccountId: true,
+          fromAccount: { select: { id: true, name: true, type: true } },
+          toAccount: { select: { id: true, name: true, type: true } },
         },
         orderBy: {
           transactionAt: "desc",
@@ -137,6 +144,27 @@ export async function GET(req: NextRequest) {
         },
         select: {
           type: true,
+          amount: true,
+        },
+      }),
+
+      prisma.user.findMany({
+        where: familyId ? { familyId } : { familyId: -1 },
+        select: { id: true, name: true, role: true },
+        orderBy: { id: "asc" },
+      }),
+
+      prisma.transaction.findMany({
+        where: {
+          ...familyWhere,
+          type: "EXPENSE",
+          transactionAt: {
+            gte: currentRange.start,
+            lte: currentRange.end,
+          },
+        },
+        select: {
+          owner: true,
           amount: true,
         },
       }),
@@ -194,15 +222,23 @@ export async function GET(req: NextRequest) {
       if (tx.type === "EXPENSE") previousExpense += amount;
     });
 
-    const targetAmount = goals.reduce(
-      (sum: number, goal: any) => sum + Number(goal.targetAmount || 0),
+    // 저축형(targetAmount>0)만 합산, 잔액형(targetAmount<0)은 별도 처리
+    const savingGoals = goals.filter((g: any) => Number(g.targetAmount) > 0);
+    const targetAmount = savingGoals.reduce(
+      (sum: number, goal: any) => sum + Number(goal.targetAmount),
+      0
+    );
+    const currentGoalAmount = savingGoals.reduce(
+      (sum: number, goal: any) => sum + Number(goal.currentAmount),
       0
     );
 
-    const currentGoalAmount = goals.reduce(
-      (sum: number, goal: any) => sum + Number(goal.currentAmount || 0),
-      0
-    );
+    // Compute per-owner expense breakdown for couple spending chart
+    const ownerExpenses: Record<string, number> = {};
+    ownerExpenseTx.forEach((tx: any) => {
+      const key = tx.owner || "미지정";
+      ownerExpenses[key] = (ownerExpenses[key] || 0) + Number(tx.amount || 0);
+    });
 
     return NextResponse.json({
       totalAsset,
@@ -223,15 +259,8 @@ export async function GET(req: NextRequest) {
 
       recentTransactions,
       accounts,
+      ownerExpenses,
+      familyUsers,
       monthRange: {
         start: currentRange.start.toISOString(),
-        end: currentRange.end.toISOString(),
-      },
-    });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: "dashboard load failed", detail: error.message },
-      { status: 500 }
-    );
-  }
-}
+        end: cur

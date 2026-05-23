@@ -89,11 +89,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 계좌 정보 조회 (familyId, stockCash 필요)
-    const account = await prisma.account.findUnique({ where: { id: accountId } });
+    // 계좌 정보 + 소유자 조회
+    const account = await prisma.account.findUnique({
+      where: { id: accountId },
+      include: { owner: true },
+    });
     if (!account) {
       return NextResponse.json({ error: "계좌를 찾을 수 없습니다." }, { status: 404 });
     }
+
+    // 계좌 소유자 이름 (없으면 공동)
+    const accountOwnerName = account.owner?.name || "공동";
 
     // 기존 보유 종목 확인 (추가분 계산용)
     const existing = await prisma.stockHolding.findUnique({
@@ -115,7 +121,7 @@ export async function POST(req: NextRequest) {
         data: {
           familyId: account.familyId,
           userId: null,
-          owner: body.owner || null,
+          owner: accountOwnerName,
           type: "EXPENSE",
           amount: cashDelta,
           category: "주식 매수",
@@ -184,7 +190,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json(holding);
   } catch (error: any) {
     return NextResponse.json(
-      { error: "보유종목 수정 실패", detail: error.message },
+      { error: "보유종목 수정 실패", detail: (error as any).message },
       { status: 500 }
     );
   }

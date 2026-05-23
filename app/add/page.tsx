@@ -2083,7 +2083,7 @@ const getAccountIcon = (type: string) => {
 const pageStyle = {
   minHeight: "100vh",
   background: "#FFFFFF",
-  padding: "16px 18px 180px",
+  padding: "16px 18px calc(180px + env(safe-area-inset-bottom))",
   display: "flex",
   justifyContent: "center",
 } as const;
