@@ -904,4 +904,132 @@ function TxRow({
   divider?: boolean;
   showDate?: boolean;
 }) {
-  const iconData = getIconData(tx.c
+  const iconData = getIconData(tx.category, serverCategories, tx.type);
+  const Icon = iconData.icon;
+  const color = getTypeColor(tx.type);
+
+  return (
+    <div
+      onClick={onPress}
+      style={{
+        display: "flex", alignItems: "center", gap: 12,
+        padding: "13px 18px",
+        borderBottom: divider ? "1px solid #F5F1FC" : "none",
+        cursor: "pointer",
+        background: "white",
+        transition: "background 0.15s",
+      }}
+    >
+      {/* 아이콘 */}
+      <div style={{
+        width: 44, height: 44, borderRadius: 16,
+        background: iconData.bg, display: "grid", placeItems: "center", flexShrink: 0,
+      }}>
+        <Icon size={20} color={color} />
+      </div>
+
+      {/* 텍스트 */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 900, color: "#2D2545", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {tx.category === "자산 수정"
+            ? "자산 수정"
+            : `${mapOwnerName(tx.owner)} · ${tx.category || (tx.type === "TRANSFER" ? "이체" : tx.type === "INCOME" ? "수입" : "지출")}`}
+        </div>
+        <div style={{ fontSize: 11, color: "#B0A8C8", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {getAccountText(tx)}
+        </div>
+        {tx.memo && (
+          <div style={{ fontSize: 11, color: "#C4B8D8", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {tx.memo}
+          </div>
+        )}
+      </div>
+
+      {/* 금액 */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
+        {showDate && <span style={{ fontSize: 11, fontWeight: 700, color: "#C4B8D8" }}>{formatDateShort(tx.transactionAt)}</span>}
+        <strong style={{ fontSize: 14, fontWeight: 900, color, lineHeight: 1.1 }}>{formatAmount(tx)}</strong>
+      </div>
+    </div>
+  );
+}
+
+/* ─── 스타일 상수 ────────────────────────────────────────── */
+const navBtnStyle = {
+  width: 36, height: 38, borderRadius: 12,
+  border: "1px solid #EDE6F9", background: "#FAFAFF",
+  display: "grid", placeItems: "center", cursor: "pointer",
+} as const;
+
+const overlayStyle = {
+  position: "fixed", inset: 0,
+  background: "rgba(45,37,69,0.35)",
+  display: "flex", alignItems: "flex-end", justifyContent: "center",
+  zIndex: 1000, backdropFilter: "blur(2px)",
+} as const;
+
+const sheetStyle = {
+  width: "100%", maxWidth: 390,
+  background: "white",
+  borderRadius: "28px 28px 0 0",
+  padding: "0 20px 40px",
+  boxShadow: "0 -8px 40px rgba(124,92,255,0.15)",
+} as const;
+
+const sheetHandleStyle = {
+  width: 40, height: 4, borderRadius: 2, background: "#E0D9F5",
+  margin: "14px auto 0",
+} as const;
+
+const sheetHeaderStyle = {
+  display: "flex", justifyContent: "space-between", alignItems: "center",
+  padding: "16px 0 14px",
+} as const;
+
+const iconBtnStyle = {
+  border: "none", background: "transparent", cursor: "pointer", padding: 4, display: "grid", placeItems: "center",
+} as const;
+
+const sheetLabelStyle = {
+  display: "block", fontSize: 11, fontWeight: 800, color: "#B0A8C8",
+  margin: "14px 0 6px", textTransform: "uppercase" as const, letterSpacing: 0.5,
+} as const;
+
+const sheetInputStyle = {
+  width: "100%", height: 48,
+  borderRadius: 16, border: "1.5px solid #EDE6F9",
+  padding: "0 14px", fontSize: 14, fontWeight: 700, color: "#2D2545",
+  outline: "none", background: "#FAFAFF", boxSizing: "border-box" as const,
+} as const;
+
+const resetBtnStyle = {
+  height: 52, border: "none", borderRadius: 18,
+  background: "#FFF3F6", color: "#FF6B81",
+  fontWeight: 900, fontSize: 14, cursor: "pointer",
+  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+} as const;
+
+const applyBtnStyle = {
+  height: 52, border: "none", borderRadius: 18,
+  background: `linear-gradient(135deg, ${theme.colors.primary} 0%, #A992FF 100%)`,
+  color: "white", fontWeight: 900,
+  cursor: "pointer",
+  fontSize: 15,
+} as const;
+
+const accountFilterLabelStyle = {
+  fontSize: 11,
+  color: theme.colors.primary,
+  fontWeight: 700,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+} as const;
+
+export default function TransactionsPage() {
+  return (
+    <Suspense fallback={null}>
+      <TransactionsContent />
+    </Suspense>
+  );
+}
