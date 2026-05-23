@@ -269,3 +269,13 @@ const scrollListStyle = {
 const ownerNameRowStyle = {
   display: "flex",
   alignItems: "center",
+  gap: 5,
+  minWidth: 0,
+} as const;
+
+const ownerDotStyle = {
+  width: 8,
+  height: 8,
+  borderRadius: 999,
+  flexShrink: 0,
+} as const;

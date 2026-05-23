@@ -221,4 +221,5 @@ const ownerPillStyle = {
   background: "rgba(255,255,255,0.65)",
   border: "1px solid rgba(0,0,0,0.07)",
   borderRadius: 999,
-  padding: "2px 8p
+  padding: "2px 8px",
+} as const;
