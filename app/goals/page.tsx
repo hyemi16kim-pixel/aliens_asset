@@ -485,4 +485,3 @@ const inputStyle = { width: "100%", height: 46, borderRadius: 16, border: `1px s
 const actionGridStyle = { display: "grid", gridTemplateColumns: "96px 1fr", gap: 10, marginTop: 16 } as const;
 const deleteButtonStyle = { height: 50, border: "none", borderRadius: 18, background: "#FFF3F6", color: theme.colors.expense, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer" } as const;
 const saveButtonStyle = { height: 50, border: "none", borderRadius: 18, background: `linear-gradient(135deg, ${theme.colors.primary} 0%, #A992FF 100%)`, color: "white", fontWeight: 900, fontSize: 15, cursor: "pointer" } as const;
-               

@@ -1999,4 +1999,12 @@ const backButtonStyle = {
   display: "grid",
   placeItems: "center",
   cursor: "pointer",
-} as const
+} as const;
+
+export default function AnalysisPage() {
+  return (
+    <Suspense fallback={null}>
+      <AnalysisPageContent />
+    </Suspense>
+  );
+}
