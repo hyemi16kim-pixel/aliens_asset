@@ -473,7 +473,6 @@ function TransactionsContent() {
         display: "flex",
         justifyContent: "center",
         transition: "background 0.4s ease",
-        overscrollBehaviorY: "contain",
       }}
     >
       <div style={{ width: "100%", maxWidth: 390, display: "flex", flexDirection: "column" }}>
