@@ -1023,29 +1023,17 @@ const resetBtnStyle = {
   height: 52, border: "none", borderRadius: 18,
   background: "#FFF3F6", color: "#FF6B81",
   fontWeight: 900, fontSize: 14, cursor: "pointer",
-  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
 } as const;
 
 const applyBtnStyle = {
   height: 52, border: "none", borderRadius: 18,
-  background: `linear-gradient(135deg, ${theme.colors.primary} 0%, #A992FF 100%)`,
-  color: "white", fontWeight: 900,
-  cursor: "pointer",
-  fontSize: 15,
-} as const;
-
-const accountFilterLabelStyle = {
-  fontSize: 11,
-  color: theme.colors.primary,
-  fontWeight: 700,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
+  background: "linear-gradient(135deg, #7C5CFF, #A992FF)",
+  color: "white", fontWeight: 900, fontSize: 15, cursor: "pointer",
 } as const;
 
 export default function TransactionsPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#F7F5FF" }} />}>
       <TransactionsContent />
     </Suspense>
   );
