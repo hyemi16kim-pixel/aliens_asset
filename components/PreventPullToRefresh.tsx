@@ -24,7 +24,8 @@ export default function PreventPullToRefresh() {
         0;
 
       // 최상단(scrollTop=0)에서 아래로 당기는 동작만 차단
-      if (scrollTop <= 0 && currentY > startY) {
+      // cancelable 확인 후 preventDefault (브라우저 경고 방지)
+      if (scrollTop <= 0 && currentY > startY && e.cancelable) {
         e.preventDefault();
       }
     };

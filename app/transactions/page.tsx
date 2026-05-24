@@ -214,6 +214,7 @@ function TransactionsContent() {
   const [serverCategories, setServerCategories] = useState<any[]>([]);
   const [filterType, setFilterType] = useState<FilterType>("CALENDAR");
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<"LIST" | "CALENDAR">("CALENDAR");
 
   const todayKey = toLocalDateKey(new Date());
@@ -431,11 +432,19 @@ function TransactionsContent() {
     setTopFilter(FILTER_ORDER[next]);
   };
 
-  const handleTouchEnd = (endX: number) => {
-    if (touchStartX === null) return;
-    const diff = touchStartX - endX;
-    if (Math.abs(diff) >= 50) moveFilter(diff > 0 ? "LEFT" : "RIGHT");
+  const handleTouchEnd = (endX: number, endY: number) => {
+    if (touchStartX === null || touchStartY === null) return;
+    const dx = touchStartX - endX;
+    const dy = touchStartY - endY;
+    // 수직 이동이 지배적이면 필터 전환 무시 (스크롤로 판단)
+    if (Math.abs(dy) > Math.abs(dx)) {
+      setTouchStartX(null);
+      setTouchStartY(null);
+      return;
+    }
+    if (Math.abs(dx) >= 60) moveFilter(dx > 0 ? "LEFT" : "RIGHT");
     setTouchStartX(null);
+    setTouchStartY(null);
   };
 
   const formatAmount = (tx: Transaction) => {
@@ -583,8 +592,8 @@ function TransactionsContent() {
         {/* ── 메인 콘텐츠 (필터 스와이프 전용 — 페이지 스와이프와 분리) ── */}
         <div
           style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 12 }}
-          onTouchStart={(e) => { e.stopPropagation(); setTouchStartX(e.touches[0].clientX); }}
-          onTouchEnd={(e) => { e.stopPropagation(); handleTouchEnd(e.changedTouches[0].clientX); }}
+          onTouchStart={(e) => { e.stopPropagation(); setTouchStartX(e.touches[0].clientX); setTouchStartY(e.touches[0].clientY); }}
+          onTouchEnd={(e) => { e.stopPropagation(); handleTouchEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY); }}
         >
           {/* 건수 레이블 */}
           {viewMode === "LIST" && (
