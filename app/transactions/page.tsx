@@ -201,9 +201,17 @@ function TransactionsContent() {
   const searchParams = useSearchParams();
 
   // 페이지 전환 스와이프 (배경 전체)
+  // 오른쪽 스와이프: 달력 뷰가 아니면 달력으로 먼저 복귀, 달력이면 홈으로 이동
   const pageSwipe = useSwipeNav({
     onSwipeLeft: () => router.push("/analysis"),
-    onSwipeRight: () => router.push("/"),
+    onSwipeRight: () => {
+      if (viewMode !== "CALENDAR") {
+        setViewMode("CALENDAR");
+        setFilterType("CALENDAR");
+      } else {
+        router.push("/");
+      }
+    },
   });
 
   const [showFilterModal, setShowFilterModal] = useState(false);
