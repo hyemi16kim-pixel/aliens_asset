@@ -292,13 +292,3 @@ export default function AssetAccountGrid({
     </div>
   );
 }
-btAccounts}
-        users={users}
-        onEdit={onEdit}
-        onPalette={onPalette}
-        onSelectStockAccount={onSelectStockAccount}
-        onDragEnd={makeHandler(debtAccounts)}
-      />
-    </div>
-  );
-}
