@@ -201,7 +201,7 @@ function AnalysisPageContent() {
   const searchParams = useSearchParams();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [tab, setTab] = useState<"ASSET" | "SPENDING" | "TREND">(
-    (searchParams.get("tab") as "ASSET" | "SPENDING" | "TREND") || "ASSET"
+    (searchParams.get("tab") as "ASSET" | "SPENDING" | "TREND") || "SPENDING"
   );
   // 탭 순서: ASSET → SPENDING → TREND
   const TAB_ORDER = ["ASSET", "SPENDING", "TREND"] as const;
@@ -219,6 +219,7 @@ function AnalysisPageContent() {
   });
 
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [stockMarketValues, setStockMarketValues] = useState<Record<number, number>>({});
   const [selectedPaletteAccount, setSelectedPaletteAccount] = useState<number | null>(null);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [users, setUsers] = useState<{ id: number; name: string; role?: string }[]>([]);
@@ -330,6 +331,23 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
         .slice()
         .sort((a: Account, b: Account) => (a.displayOrder || 0) - (b.displayOrder || 0));
       setAccounts(sorted);
+
+      // 주식계좌 현 평가액(총평가 = 주식 + 예수금) 조회
+      const stockAccounts = sorted.filter((a: Account) => a.type === "STOCK");
+      if (stockAccounts.length > 0) {
+        Promise.all(
+          stockAccounts.map((a: Account) =>
+            fetch(`/api/stocks/summary?accountId=${a.id}`)
+              .then((r) => r.json())
+              .then((d) => ({ id: a.id, totalValue: Number(d.totalValue || 0) }))
+              .catch(() => ({ id: a.id, totalValue: Number(a.stockCash || a.balance || 0) }))
+          )
+        ).then((results) => {
+          const map: Record<number, number> = {};
+          results.forEach(({ id, totalValue }) => { map[id] = totalValue; });
+          setStockMarketValues(map);
+        });
+      }
 
       // 카테고리 아이콘 맵
       const all = [...(Array.isArray(expCats) ? expCats : []), ...(Array.isArray(incCats) ? incCats : [])];
@@ -700,6 +718,7 @@ const getPercent = (owner: string) => {
                   return accounts.filter((a) => !a.owner || a.owner?.name === "공동");
                 return accounts; // 전체
               })()}
+              stockMarketValues={stockMarketValues}
               onSelectStockAccount={(account) => {
                 setSelectedStockAccount(account);
               }}
@@ -2036,6 +2055,54 @@ const drilldownTxRowStyle = {
   gap: 8,
   padding: "7px 0",
   borderBottom: "1px solid #EDE6F910",
+} as const;
+
+const budgetUsageListStyle = {
+  marginTop: 16,
+  height: 190,
+  overflowY: "scroll",
+  overflowX: "hidden",
+  WebkitOverflowScrolling: "touch",
+  overscrollBehavior: "contain",
+  touchAction: "pan-y",
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+  paddingRight: 4,
+} as const;
+
+const modalCloseButtonStyle = {
+  width: 30,
+  height: 30,
+  border: "none",
+  borderRadius: "50%",
+  background: "#F4F0FF",
+  color: theme.colors.primary,
+  fontSize: 20,
+  fontWeight: 900,
+  lineHeight: 1,
+  cursor: "pointer",
+} as const;
+
+const backButtonStyle = {
+  width: 30,
+  height: 30,
+  border: "none",
+  background: "transparent",
+  color: "#9B96AA",
+  display: "grid",
+  placeItems: "center",
+  cursor: "pointer",
+} as const;
+
+export default function AnalysisPage() {
+  return (
+    <Suspense fallback={null}>
+      <AnalysisPageContent />
+    </Suspense>
+  );
+}
+"1px solid #EDE6F910",
 } as const;
 
 const budgetUsageListStyle = {

@@ -208,12 +208,14 @@ export default function AssetAccountGrid({
   onEdit,
   onPalette,
   onSelectStockAccount,
+  stockMarketValues = {},
 }: {
   accounts: Account[];
   users?: { id: number; name: string; role?: string }[];
   onEdit: (account: Account) => void;
   onPalette: (account: Account) => void;
   onSelectStockAccount: (account: Account) => void;
+  stockMarketValues?: Record<number, number>;
 }) {
   const [items, setItems] = useState(accounts);
 
@@ -224,7 +226,11 @@ export default function AssetAccountGrid({
   const debtAccounts = items.filter((a) => DEBT_TYPES.includes(a.type));
 
   const assetTotal = assetAccounts.reduce((sum, a) => sum + Number(a.balance || 0), 0);
-  const investTotal = investAccounts.reduce((sum, a) => sum + Number(a.stockCash || a.balance || 0), 0);
+  // 현 평가액 = 주식 평가 + 예수금 (stockMarketValues에서 우선, 없으면 fallback)
+  const investTotal = investAccounts.reduce(
+    (sum, a) => sum + (stockMarketValues[a.id] ?? Number(a.stockCash || a.balance || 0)),
+    0
+  );
   const debtTotal = debtAccounts.reduce((sum, a) => {
     if (a.type === "CARD") return sum + Math.abs(Number(a.nextPaymentAmount || 0));
     if (a.type === "LOAN") return sum + Math.abs(Number(a.balance || 0));
@@ -277,6 +283,16 @@ export default function AssetAccountGrid({
         total={debtTotal}
         isDebt
         accounts={debtAccounts}
+        users={users}
+        onEdit={onEdit}
+        onPalette={onPalette}
+        onSelectStockAccount={onSelectStockAccount}
+        onDragEnd={makeHandler(debtAccounts)}
+      />
+    </div>
+  );
+}
+btAccounts}
         users={users}
         onEdit={onEdit}
         onPalette={onPalette}
