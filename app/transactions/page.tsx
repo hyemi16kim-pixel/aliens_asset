@@ -237,6 +237,7 @@ function TransactionsContent() {
   const [dayRange, setDayRange] = useState<number>(1);
 
   const [dayDetailFilter, setDayDetailFilter] = useState<"ALL" | "INCOME" | "EXPENSE" | "TRANSFER" | "STOCK">("ALL");
+  const [categoryFilter, setCategoryFilter] = useState<string>("전체");
 
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [editFromAccountId, setEditFromAccountId] = useState("");
@@ -332,6 +333,26 @@ function TransactionsContent() {
       return inRange && topTypeMatch && modalTypeMatch && accountMatch;
     });
   }, [transactions, filterType, viewMode, dayRange, monthRange, selectedType, selectedAccountId]);
+
+  // ALL 뷰에서 사용 중인 EXPENSE 카테고리 목록 (실제 데이터 기준)
+  const expenseCategoriesInView = useMemo(() => {
+    if (filterType !== "ALL" || viewMode !== "LIST") return [];
+    const cats = new Set<string>();
+    filteredTransactions.forEach((tx: any) => {
+      if (tx.type === "EXPENSE" && tx.category) cats.add(tx.category);
+    });
+    return Array.from(cats).sort();
+  }, [filteredTransactions, filterType, viewMode]);
+
+  // 카테고리 필터 적용된 최종 목록
+  const displayedTransactions = useMemo(() => {
+    if (filterType !== "ALL" || viewMode !== "LIST" || categoryFilter === "전체") {
+      return filteredTransactions;
+    }
+    return filteredTransactions.filter((tx: any) =>
+      tx.type === "EXPENSE" && (tx.category || "기타") === categoryFilter
+    );
+  }, [filteredTransactions, filterType, viewMode, categoryFilter]);
 
   const calendarDays = useMemo(() => {
     const days: (Date | null)[] = [];
@@ -430,7 +451,7 @@ function TransactionsContent() {
     setFilterType(nextFilter);
     setSelectedDay(null);
     setViewMode(nextFilter === "CALENDAR" ? "CALENDAR" : "LIST");
-
+    if (nextFilter !== "ALL") setCategoryFilter("전체");
   };
 
   const moveFilter = (direction: "LEFT" | "RIGHT") => {
@@ -603,10 +624,45 @@ function TransactionsContent() {
           onTouchStart={(e) => { e.stopPropagation(); setTouchStartX(e.touches[0].clientX); setTouchStartY(e.touches[0].clientY); }}
           onTouchEnd={(e) => { e.stopPropagation(); handleTouchEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY); }}
         >
-          {/* 건수 레이블 */}
+          {/* 건수 레이블 + 카테고리 필터 (ALL + LIST 전용) */}
           {viewMode === "LIST" && (
-            <div style={{ fontSize: 12, fontWeight: 800, color: "#B0A8C8", paddingLeft: 2 }}>
-              {filterType === "ALL" ? "전체" : filterType === "INCOME" ? "수입" : filterType === "EXPENSE" ? "지출" : "이체"} {filteredTransactions.length}건
+            <div>
+              {filterType === "ALL" && expenseCategoriesInView.length > 0 && (
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  overflowX: "auto", paddingBottom: 4,
+                  WebkitOverflowScrolling: "touch",
+                  scrollbarWidth: "none",
+                  msOverflowStyle: "none",
+                } as React.CSSProperties}>
+                  <SlidersHorizontal size={14} color="#A59DBD" style={{ flexShrink: 0 }} />
+                  {["전체", ...expenseCategoriesInView].map((cat) => {
+                    const active = categoryFilter === cat;
+                    return (
+                      <button
+                        key={cat}
+                        onClick={() => setCategoryFilter(cat)}
+                        style={{
+                          flexShrink: 0,
+                          height: 28, padding: "0 12px",
+                          borderRadius: 999, fontSize: 11, fontWeight: 800,
+                          border: active ? "1.5px solid #FF6B81" : "1.5px solid #E8E1F5",
+                          background: active ? "#FFF0F3" : "rgba(255,255,255,0.8)",
+                          color: active ? "#FF6B81" : "#A59DBD",
+                          cursor: "pointer", whiteSpace: "nowrap",
+                        }}
+                      >{cat}</button>
+                    );
+                  })}
+                </div>
+              )}
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#B0A8C8", paddingLeft: 2, marginTop: filterType === "ALL" && expenseCategoriesInView.length > 0 ? 6 : 0 }}>
+                {filterType === "ALL"
+                  ? (categoryFilter === "전체" ? "전체" : categoryFilter)
+                  : filterType === "INCOME" ? "수입"
+                  : filterType === "EXPENSE" ? "지출"
+                  : "이체"} {displayedTransactions.length}건
+              </div>
             </div>
           )}
 
@@ -742,7 +798,7 @@ function TransactionsContent() {
           ) : (
             /* 리스트 뷰 */
             <>
-              {filteredTransactions.length === 0 ? (
+              {displayedTransactions.length === 0 ? (
                 <div style={{
                   background: "white", borderRadius: 22, border: "1px solid #EDE6F9",
                   padding: "32px 20px", textAlign: "center", fontSize: 13, color: "#C4B8D8",
@@ -752,12 +808,12 @@ function TransactionsContent() {
                   background: "white", borderRadius: 24, border: "1px solid #EDE6F9",
                   boxShadow: "0 4px 16px rgba(167,139,250,0.08)", overflow: "hidden",
                 }}>
-                  {filteredTransactions.map((tx, i) => (
+                  {displayedTransactions.map((tx, i) => (
                     <TxRow key={tx.id} tx={tx} serverCategories={serverCategories}
                       getTypeColor={getTypeColor} formatAmount={formatAmount}
                       getAccountText={getAccountText} formatDateShort={formatDateShort}
                       onPress={() => openEditSheet(tx)}
-                      divider={i < filteredTransactions.length - 1}
+                      divider={i < displayedTransactions.length - 1}
                       showDate
                     />
                   ))}

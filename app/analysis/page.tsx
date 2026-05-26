@@ -165,6 +165,8 @@ type Transaction = {
   amount: number;
   owner?: string | null;
   transactionAt: string;
+  category?: string | null;
+  memo?: string | null;
 };
 
 type Account = {
@@ -237,6 +239,8 @@ function AnalysisPageContent() {
   const [cardCycleEndDay, setCardCycleEndDay] = useState("");
   const [selectedStockAccount, setSelectedStockAccount] = useState<Account | null>(null);
   const [trendMoneyType, setTrendMoneyType] = useState<"EXPENSE" | "INCOME">("EXPENSE");
+  const [selectedTrendCategory, setSelectedTrendCategory] = useState<string | null>(null);
+  const [budgets, setBudgets] = useState<Record<string, number>>({});
     
   const [monthStartDay, setMonthStartDay] = useState(1);
   const [trendMonth, setTrendMonth] = useState(() => {
@@ -303,7 +307,8 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
       fetch(`/api/accounts?familyId=${familyId}`).then(r => r.json()),
       fetch(`/api/categories?familyId=${familyId}&type=EXPENSE`).then(r => r.json()),
       fetch(`/api/categories?familyId=${familyId}&type=INCOME`).then(r => r.json()),
-    ]).then(([txData, profileData, accountData, expCats, incCats]) => {
+      fetch(`/api/family-settings?familyId=${familyId}`).then(r => r.json()),
+    ]).then(([txData, profileData, accountData, expCats, incCats, settingsData]) => {
       // 거래내역
       setTransactions(txData || []);
 
@@ -331,6 +336,25 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
       const iconMap: Record<string, string> = {};
       all.forEach((cat: any) => { if (cat.name && cat.icon) iconMap[cat.name] = cat.icon; });
       setDbCategoryIconMap(iconMap);
+
+      // 예산 데이터: DB 우선, 없으면 localStorage 캐시
+      if (settingsData && settingsData.budgets && typeof settingsData.budgets === "object") {
+        const budgetMap: Record<string, number> = {};
+        for (const [k, v] of Object.entries(settingsData.budgets)) {
+          budgetMap[k] = Number(v) || 0;
+        }
+        setBudgets(budgetMap);
+        // localStorage 캐시 갱신
+        localStorage.setItem("alien_category_budgets", JSON.stringify(budgetMap));
+      } else {
+        // DB에 없으면 localStorage 캐시 사용
+        try {
+          const cached = JSON.parse(localStorage.getItem("alien_category_budgets") || "{}");
+          const budgetMap: Record<string, number> = {};
+          for (const [k, v] of Object.entries(cached)) budgetMap[k] = Number(v) || 0;
+          setBudgets(budgetMap);
+        } catch { /* ignore */ }
+      }
     }).catch(console.error);
   }, []);
 
@@ -408,14 +432,9 @@ const getPercent = (owner: string) => {
     return acc;
   }, {});
 
-  const savedBudgets =
-    typeof window !== "undefined"
-      ? JSON.parse(localStorage.getItem("alien_category_budgets") || "{}")
-      : {};
-
   const topCategories = Object.entries(categoryTotals)
     .map(([name, amount]) => {
-      const budget = Number(savedBudgets[name] || 0);
+      const budget = Number(budgets[name] || 0);
       const usageRate = budget > 0 ? Math.round((amount / budget) * 100) : 0;
 
       return {
@@ -808,18 +827,25 @@ const getCategoryTotal = (list: Transaction[]) => {
   }, {});
 };
 
-const trendTargetTransactions =
-  trendMoneyType === "EXPENSE" ? currentMonthExpenses : currentMonthIncome;
+// 소비비중은 항상 EXPENSE 기준 (수입/이체 제외)
+const trendTargetTransactions = currentMonthExpenses;
 
 const trendCategoryMap = getCategoryTotal(trendTargetTransactions);
+const trendTotal = Object.values(trendCategoryMap).reduce((s, v) => s + v, 0);
 
 const trendCategories = Object.entries(trendCategoryMap)
   .sort((a, b) => b[1] - a[1])
-  .slice(0, 5)
+  .slice(0, 6)
   .map(([name, amount]) => ({
     name,
     amount,
+    percent: trendTotal > 0 ? Math.round((amount / trendTotal) * 100) : 0,
   }));
+
+// 선택된 카테고리의 해당 월 거래내역
+const selectedCategoryTransactions = selectedTrendCategory
+  ? trendTargetTransactions.filter((tx: any) => (tx.category || "기타") === selectedTrendCategory)
+  : [];
 
 const lastMonthExpenses = expenses.filter((tx) =>
   isDateInRange(tx.transactionAt, prevTrendRange.start, prevTrendRange.end)
@@ -881,36 +907,11 @@ const lastMonthExpenses = expenses.filter((tx) =>
   </div>
 
   <div style={spendingHeaderStyle}>
-<strong style={{ fontSize: 14 }}>
-  {trendMoneyType === "EXPENSE" ? "소비 비중" : "수입 비중"}
-</strong>
-    <span style={smallSubTextStyle}>카테고리별</span>
+    <strong style={{ fontSize: 14 }}>소비 비중</strong>
+    <span style={smallSubTextStyle}>지출 카테고리별</span>
   </div>
-<div style={trendToggleStyle}>
-  <button
-    onClick={() => setTrendMoneyType("EXPENSE")}
-    style={{
-      ...trendToggleButtonStyle,
-      background: trendMoneyType === "EXPENSE" ? "#FFF3F6" : "#FFFFFF",
-      color: trendMoneyType === "EXPENSE" ? theme.colors.expense : theme.colors.subtext,
-    }}
-  >
-    소비
-  </button>
-
-  <button
-    onClick={() => setTrendMoneyType("INCOME")}
-    style={{
-      ...trendToggleButtonStyle,
-      background: trendMoneyType === "INCOME" ? "#ECFFF6" : "#FFFFFF",
-      color: trendMoneyType === "INCOME" ? theme.colors.income : theme.colors.subtext,
-    }}
-  >
-    수입
-  </button>
-</div>
   {trendCategories.length === 0 ? (
-    <p style={emptyTrendTextStyle}>해당 월 소비 데이터가 없습니다.</p>
+    <p style={emptyTrendTextStyle}>해당 월 지출 데이터가 없습니다.</p>
   ) : (
     <>
       <div
@@ -940,32 +941,90 @@ const lastMonthExpenses = expenses.filter((tx) =>
               .reduce((sum, item) => sum + item.amount, 0)
               .toLocaleString()}
           </strong>
-{trendMoneyType === "EXPENSE" ? "총 지출" : "총 수입"}
+총 지출
         </div>
       </div>
 
       <div style={donutLegendStyle}>
-        {trendCategories.map((item, index) => {
-          const total = trendCategories.reduce(
-            (sum, target) => sum + target.amount,
-            0
-          );
-          const percent = total ? Math.round((item.amount / total) * 100) : 0;
-
-          return (
-            <div key={item.name} style={donutLegendItemStyle}>
-              <span
-                style={{
-                  ...donutDotStyle,
-                  background: donutColors[index % donutColors.length],
-                }}
-              />
-              <span style={{ flex: 1 }}>{item.name}</span>
-              <strong>{percent}%</strong>
-            </div>
-          );
-        })}
+        {trendCategories.map((item, index) => (
+          <button
+            key={item.name}
+            type="button"
+            onClick={() => setSelectedTrendCategory(item.name)}
+            style={{
+              ...donutLegendItemStyle,
+              cursor: "pointer",
+              border: "none",
+              width: "100%",
+              textAlign: "left",
+              background: selectedTrendCategory === item.name ? `${donutColors[index % donutColors.length]}22` : "#FAF8FF",
+              outline: selectedTrendCategory === item.name ? `1.5px solid ${donutColors[index % donutColors.length]}` : "none",
+            }}
+          >
+            <span
+              style={{
+                ...donutDotStyle,
+                background: donutColors[index % donutColors.length],
+              }}
+            />
+            <span style={{ flex: 1, fontWeight: 800 }}>{item.name}</span>
+            <span style={{ fontSize: 11, color: "#9b8ec4", marginRight: 6 }}>
+              {item.amount.toLocaleString()}원
+            </span>
+            <strong style={{ fontSize: 13, minWidth: 32, textAlign: "right" }}>
+              {item.percent}%
+            </strong>
+          </button>
+        ))}
       </div>
+
+      {/* 카테고리 거래내역 드릴다운 */}
+      {selectedTrendCategory && (
+        <div style={categoryDrilldownStyle}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <strong style={{ fontSize: 13 }}>
+              {trendMonthIndex + 1}월 · {selectedTrendCategory}
+            </strong>
+            <button
+              type="button"
+              onClick={() => setSelectedTrendCategory(null)}
+              style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "#9b8ec4", lineHeight: 1 }}
+            >
+              ×
+            </button>
+          </div>
+          {selectedCategoryTransactions.length === 0 ? (
+            <p style={{ fontSize: 12, color: "#9b8ec4", textAlign: "center", margin: "12px 0" }}>거래 내역이 없습니다.</p>
+          ) : (
+            <div style={{ display: "grid", gap: 6 }}>
+              {selectedCategoryTransactions
+                .sort((a: any, b: any) => new Date(b.transactionAt).getTime() - new Date(a.transactionAt).getTime())
+                .map((tx: any) => (
+                <div key={tx.id} style={drilldownTxRowStyle}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "#2d2545" }}>
+                      {tx.memo || tx.category || "기타"}
+                    </div>
+                    <div style={{ fontSize: 10, color: "#9b8ec4", marginTop: 1 }}>
+                      {new Date(tx.transactionAt).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })}
+                      {tx.owner ? ` · ${tx.owner}` : ""}
+                    </div>
+                  </div>
+                  <strong style={{ fontSize: 13, color: "#FF6B81" }}>
+                    -{tx.amount.toLocaleString()}원
+                  </strong>
+                </div>
+              ))}
+              <div style={{ marginTop: 4, paddingTop: 8, borderTop: "1px solid #EDE6F9", display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                <span style={{ color: "#9b8ec4" }}>합계</span>
+                <strong style={{ color: "#FF6B81" }}>
+                  -{selectedCategoryTransactions.reduce((s: number, tx: any) => s + tx.amount, 0).toLocaleString()}원
+                </strong>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </>
   )}
 </section>
@@ -1961,6 +2020,22 @@ const trendToggleButtonStyle = {
   fontSize: 12,
   fontWeight: 900,
   cursor: "pointer",
+} as const;
+
+const categoryDrilldownStyle = {
+  marginTop: 14,
+  padding: "12px 14px",
+  borderRadius: 18,
+  background: "#F8F5FF",
+  border: "1px solid #EDE6F9",
+} as const;
+
+const drilldownTxRowStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "7px 0",
+  borderBottom: "1px solid #EDE6F910",
 } as const;
 
 const budgetUsageListStyle = {

@@ -34,12 +34,9 @@ export default function StockHoldingList({
 }: Props) {
   const [items, setItems] = useState<Holding[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showAdd, setShowAdd] = useState(false);
   const [editingItem, setEditingItem] = useState<Holding | null>(null);
   const keyboardHeight = useKeyboardOffset();
 
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
   const [quantity, setQuantity] = useState("");
   const [avgPrice, setAvgPrice] = useState("");
 
@@ -98,34 +95,6 @@ const saveEditStock = async () => {
     await loadStocks();
     };
 
-  const saveStock = async () => {
-    const res = await fetch("/api/stocks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        accountId,
-        name,
-        code,
-        quantity: Number(quantity),
-        avgPrice: Number(avgPrice),
-      }),
-    });
-
-    const data = await res.json().catch(() => null);
-
-    if (!res.ok) {
-      alert(data?.error || "종목 저장 실패");
-      return;
-    }
-
-    setShowAdd(false);
-    setName("");
-    setCode("");
-    setQuantity("");
-    setAvgPrice("");
-    await loadStocks();
-  };
-
   return (
     <section style={wrapStyle}>
       <div style={headerStyle}>
@@ -136,24 +105,7 @@ const saveEditStock = async () => {
           </div>
         </div>
 
-                <div
-                style={{
-                    textAlign: "right",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                }}
-                >
-            
-          <strong>{money(total)}</strong>
-            <button
-            type="button"
-            onClick={() => setShowAdd(true)}
-            style={addButtonStyle}
-            >
-            + 종목 추가
-          </button>
-        </div>
+        <strong>{money(total)}</strong>
       </div>
 
       <div style={graphWrapStyle}>
@@ -218,52 +170,6 @@ const saveEditStock = async () => {
           </div>
         ))}
       </div>
-
-      {showAdd && (
-        <div style={{ ...modalOverlayStyle, paddingBottom: keyboardHeight > 0 ? keyboardHeight : 0 }}>
-          <div style={modalStyle}>
-            <strong>보유종목 추가</strong>
-
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="종목명 예: 삼성전자"
-              style={inputStyle}
-            />
-
-            <input
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="종목코드 예: 005930"
-              style={inputStyle}
-            />
-
-            <input
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              placeholder="수량"
-              type="number"
-              style={inputStyle}
-            />
-
-            <input
-              value={avgPrice}
-              onChange={(e) => setAvgPrice(e.target.value)}
-              placeholder="평균단가"
-              type="number"
-              style={inputStyle}
-            />
-
-            <button onClick={saveStock} style={saveButtonStyle}>
-              저장하기
-            </button>
-
-            <button onClick={() => setShowAdd(false)} style={cancelButtonStyle}>
-              닫기
-            </button>
-          </div>
-        </div>
-      )}
 
       {editingItem && (
         <div style={{ ...modalOverlayStyle, paddingBottom: keyboardHeight > 0 ? keyboardHeight : 0 }}>
@@ -364,19 +270,6 @@ const emptyStyle = {
   fontSize: 12,
   color: theme.colors.subtext,
   margin: "8px 0",
-} as const;
-
-const addButtonStyle = {
-  marginTop: 0,
-  height: 20,
-  display: "flex",
-  alignItems: "center",
-  border: "none",
-  background: "transparent",
-  color: theme.colors.primary,
-  fontSize: 11,
-  fontWeight: 900,
-  cursor: "pointer",
 } as const;
 
 const modalOverlayStyle = {

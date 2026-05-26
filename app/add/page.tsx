@@ -94,13 +94,6 @@ type CategoryItem = {
   icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
 };
 
-const categoryMap: Record<string, CategoryItem[]> = {
-  EXPENSE: [],
-  INCOME: [],
-  TRANSFER: [],
-  STOCK: [],
-};
-
 const customIconMap = {
   EXPENSE: [
     { key: "식비", icon: Utensils },
@@ -132,16 +125,21 @@ const customIconMap = {
   ],
   TRANSFER: [
     { key: "이체", icon: ArrowLeftRight },
-    { key: "자동이체", icon: Repeat },
-    { key: "카드대금", icon: CreditCard },
-    { key: "저축이동", icon: PiggyBank },
-    { key: "은행", icon: Landmark },
+    { key: "카드 전월 선결제", icon: CreditCard },
+    { key: "카드 이번달 선결제", icon: CreditCard },
   ],
   STOCK: [
     { key: "주식", icon: PiggyBank },
     { key: "매수", icon: Plus },
     { key: "매도", icon: ArrowDownCircle },
   ],
+};
+
+const categoryMap: Record<string, CategoryItem[]> = {
+  EXPENSE: customIconMap.EXPENSE.map(({ key, icon }) => ({ name: key, icon })),
+  INCOME: customIconMap.INCOME.map(({ key, icon }) => ({ name: key, icon })),
+  TRANSFER: customIconMap.TRANSFER.map(({ key, icon }) => ({ name: key, icon })),
+  STOCK: customIconMap.STOCK.map(({ key, icon }) => ({ name: key, icon })),
 };
 
 // 프로필 페이지에서 저장한 영어 아이콘 키 → Lucide 컴포넌트 매핑
@@ -248,6 +246,37 @@ const [importedMessages, setImportedMessages] = useState<ImportedMessage[]>([]);
 const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
 
+// SMS 텍스트에서 가맹점명만 추출 (카드 승인 문자 기준)
+const cleanSmsMemo = (text: string): string => {
+  let m = text;
+  // 1. [Web발신] / [앱발신] 등 접두사 제거
+  m = m.replace(/\[.*?발신\]/gi, "");
+  // 2. 카드명+번호+승인 패턴 제거 (예: KB국민카드3072승인, 현대카드1234승인)
+  m = m.replace(/[가-힣a-zA-Z]+카드\d+승인/g, "");
+  m = m.replace(/[가-힣a-zA-Z]+(은행|뱅크|페이|머니)\s*(\d+\s*)?(승인|출금|입금|결제)/g, "");
+  // 3. 이름*이름님 패턴 제거 (예: 김*미님)
+  m = m.replace(/[가-힣]{1,3}\*[가-힣]{0,3}님/g, "");
+  // 4. 금액 제거 (예: 7,600원, 451,541원)
+  m = m.replace(/\d{1,3}(?:,\d{3})*\s*원/g, "");
+  // 5. 누적액 제거
+  m = m.replace(/누적\s*\d[\d,]*/g, "");
+  // 6. 날짜/시간 패턴 제거 (예: 05/26 10:12, 2024.05.26)
+  m = m.replace(/\d{2,4}[./]\d{2}[./]\d{2,4}(\s+\d{2}:\d{2}(:\d{2})?)?/g, "");
+  m = m.replace(/\d{2}\/\d{2}\s+\d{2}:\d{2}/g, "");
+  // 7. 일시불 / 할부 패턴 제거
+  m = m.replace(/일시불|\d+개월/g, "");
+  // 8. 숫자만 있는 토큰 제거
+  m = m.replace(/\b\d+\b/g, "");
+  // 9. 밑줄 → 공백, 특수문자 정리
+  m = m.replace(/[_\-]/g, " ");
+  m = m.replace(/[\[\]()【】《》「」<>]/g, "");
+  // 10. 공백 정리, 각 토큰 끝의 단독 숫자 제거
+  m = m.replace(/\s+/g, " ").trim();
+  // 11. 결과가 너무 짧거나 없으면 원문 40자 사용
+  const clean = m.trim();
+  return clean.length >= 2 ? clean.slice(0, 30) : text.replace(/\s+/g, " ").slice(0, 40);
+};
+
 const parseImportedMessage = (item: ImportedMessage) => {
   const text = item.rawText || "";
 
@@ -282,13 +311,23 @@ const parseImportedMessage = (item: ImportedMessage) => {
     ? "INCOME"
     : "EXPENSE";
 
+  // 날짜 자동 파싱: MM/DD HH:MM 또는 MM/DD 패턴
+  const dateMatch = text.match(/(\d{2})\/(\d{2})(?:\s+(\d{2}):(\d{2}))?/);
+  let date = new Date().toISOString().slice(0, 10);
+  if (dateMatch) {
+    const year = new Date().getFullYear();
+    const mm = dateMatch[1];
+    const dd = dateMatch[2];
+    date = `${year}-${mm}-${dd}`;
+  }
+
   return {
     type,
     amount,
     category: type === "INCOME" ? "수입" : "기타",
-    date: new Date().toISOString().slice(0, 10),
+    date,
     accountNameHint: item.sourceKey || "",
-    memo: text.replace(/\s+/g, " ").slice(0, 40),
+    memo: cleanSmsMemo(text),
   };
 };
 
@@ -419,6 +458,18 @@ const parseImportedMessage = (item: ImportedMessage) => {
       .catch(console.error);
   }, [type, stockAccountId]);
 
+
+  // 주식 수량 × 단가 → 금액 자동 계산
+  useEffect(() => {
+    if (type !== "STOCK" || stockTradeType === "DIVIDEND") return;
+    const qty = Number(stockQuantity.replace(/[^0-9.]/g, "") || 0);
+    const price = Number(stockPrice.replace(/[^0-9.]/g, "") || 0);
+    if (qty > 0 && price > 0) {
+      setAmount(String(Math.round(qty * price)));
+    } else {
+      setAmount("");
+    }
+  }, [stockQuantity, stockPrice, type, stockTradeType]);
 
   // 카테고리 로드
   useEffect(() => {
@@ -809,6 +860,58 @@ const refreshImportedMessages = async () => {
 };
 
 
+// 별명 매칭 우선순위 함수
+// P1: 특수문자 포함 원문에서 alias 그대로 발견 (가장 정확)
+// P2: 정규화 후 alias가 완전한 단어로 존재 (뒤에 한글/영숫자가 이어지지 않음)
+// P3: 정규화 후 substring 포함 (현재 동작)
+// 같은 순위라면 긴 alias 우선 (더 구체적)
+const getBestAliasMatch = (
+  account: Account,
+  rawText: string
+): { priority: number; aliasLen: number } => {
+  const aliases: string[] = account.aliases?.length
+    ? account.aliases
+    : account.sourceKey
+    ? [account.sourceKey]
+    : [];
+
+  const lowerRaw = rawText.toLowerCase();
+  const normText = normalizeKey(rawText);
+
+  let bestPriority = 4;
+  let bestAliasLen = 0;
+
+  for (const alias of aliases) {
+    if (!alias) continue;
+    const lowerAlias = alias.toLowerCase();
+    const normAlias = normalizeKey(alias);
+    if (!normAlias || normAlias.length < 1) continue;
+
+    // P1: 특수문자 포함 그대로 원문에 존재
+    if (lowerRaw.includes(lowerAlias)) {
+      if (1 < bestPriority || (1 === bestPriority && lowerAlias.length > bestAliasLen)) {
+        bestPriority = 1;
+        bestAliasLen = lowerAlias.length;
+      }
+      continue;
+    }
+
+    // P2 / P3: 정규화 텍스트에서 검색
+    const idx = normText.indexOf(normAlias);
+    if (idx !== -1) {
+      const afterChar = normText[idx + normAlias.length];
+      const isWordBoundary = !afterChar || !/[a-z0-9가-힣]/.test(afterChar);
+      const p = isWordBoundary ? 2 : 3;
+      if (p < bestPriority || (p === bestPriority && normAlias.length > bestAliasLen)) {
+        bestPriority = p;
+        bestAliasLen = normAlias.length;
+      }
+    }
+  }
+
+  return { priority: bestPriority, aliasLen: bestAliasLen };
+};
+
 const applyImportedCandidate = (candidate: ImportedMessage) => {
   if (accounts.length === 0) {
     alert("계좌 목록을 불러오는 중입니다. 잠시 후 다시 눌러주세요.");
@@ -816,50 +919,32 @@ const applyImportedCandidate = (candidate: ImportedMessage) => {
   }
   const parsed = parseImportedMessage(candidate);
 
+  const combinedText = `${candidate.sourceKey || ""} ${candidate.rawText || ""}`;
+
+  // 별명 기반 우선순위 매칭
+  type MatchResult = { account: Account; priority: number; aliasLen: number };
+  const aliasMatches: MatchResult[] = accounts
+    .filter((a) => a.type !== "STOCK")
+    .map((account) => {
+      const m = getBestAliasMatch(account, combinedText);
+      return { account, ...m };
+    })
+    .filter((m) => m.priority < 4);
+
+  // 우선순위 낮을수록 좋고 (1=최우선), 같으면 alias 길수록 좋음
+  aliasMatches.sort((a, b) => {
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    return b.aliasLen - a.aliasLen;
+  });
+
+  // sourceKey 완전 매칭 (P0으로 취급 - alias보다 우선)
   const sourceKey = normalizeKey(candidate.sourceKey);
-  const bankName = normalizeKey(parsed.accountNameHint || "");
-  const rawKey = normalizeKey(candidate.rawText || "");
-
-  
   const sourceMatchedAccount = accounts.find((account) => {
-  const accountSourceKey = normalizeKey(account.sourceKey || "");
-  return accountSourceKey && sourceKey && accountSourceKey === sourceKey;
-});
+    const accountSourceKey = normalizeKey(account.sourceKey || "");
+    return accountSourceKey && sourceKey && accountSourceKey === sourceKey;
+  });
 
-const fullNameMatchedAccount = accounts.find((account) => {
-  const accountName = normalizeKey(account.name || "");
-  return account.type !== "STOCK" && bankName && accountName === bankName;
-});
-
-const sourcePartialMatchedAccount = accounts.find((account) => {
-  const accountSourceKey = normalizeKey(account.sourceKey || "");
-
-  const targetText = normalizeKey(
-    `${candidate.sourceKey || ""} ${candidate.rawText || ""} ${
-      parsed.accountNameHint || ""
-    }`
-  );
-
-  if (!accountSourceKey || accountSourceKey.length < 2) return false;
-
-  return targetText.includes(accountSourceKey);
-});
-const bankPartialMatchedAccount = accounts.find((account) => {
-  const accountName = normalizeKey(account.name || "");
-
-  return (
-    account.type !== "STOCK" &&
-    bankName &&
-    accountName &&
-    (accountName.includes(bankName) || bankName.includes(accountName))
-  );
-});
-
-const matchedAccount =
-  sourceMatchedAccount ||
-  sourcePartialMatchedAccount ||
-  fullNameMatchedAccount ||
-  bankPartialMatchedAccount;
+  const matchedAccount = sourceMatchedAccount || aliasMatches[0]?.account || null;
 
 setType(parsed.type);
 setAmount(String(parsed.amount));
@@ -881,16 +966,15 @@ setOwner(myName);
 
 setSelectedImportId(String(candidate.id));
 console.log("MATCH_DEBUG", {
-  sourceKey,
-  bankName,
+  combinedText,
   rawText: candidate.rawText,
-  accounts: accounts.map((a) => ({
-    id: a.id,
-    name: a.name,
-    sourceKey: a.sourceKey,
+  aliasMatches: aliasMatches.map((m) => ({
+    id: m.account.id,
+    name: m.account.name,
+    priority: m.priority,
+    aliasLen: m.aliasLen,
   })),
-  sourcePartialMatchedAccount,
-  matchedAccount,
+  matchedAccount: matchedAccount ? { id: matchedAccount.id, name: matchedAccount.name } : null,
 });
 };
 
@@ -1150,16 +1234,8 @@ console.log("MATCH_DEBUG", {
     const text = `${item.rawText} ${item.sourceKey}`.toLowerCase();
 
     return accounts.some((account) => {
-      const aliasMatch =
-        account.aliases?.some((alias: string) =>
-          text.includes(alias.toLowerCase())
-        ) ?? false;
-
-      const sourceMatch =
-        account.sourceKey &&
-        text.includes(String(account.sourceKey).toLowerCase());
-
-      return aliasMatch || sourceMatch;
+      const { priority } = getBestAliasMatch(account, text);
+      return priority < 4;
     });
   })
   .filter(
@@ -1269,12 +1345,32 @@ console.log("MATCH_DEBUG", {
           {!amount && <span style={{ ...amountPlaceholderStyle, color: `${activeColor}60` }}>0</span>}
           <input
             value={amount ? Number(amount).toLocaleString() : ""}
-            onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
-            onFocus={(e) => scrollInputIntoView(e.currentTarget)}
-            style={{ ...amountInputStyle, color: activeColor }}
+            onChange={(e) => {
+              if (type === "STOCK" && stockTradeType !== "DIVIDEND") return;
+              setAmount(e.target.value.replace(/[^0-9]/g, ""));
+            }}
+            onFocus={(e) => {
+              if (type === "STOCK" && stockTradeType !== "DIVIDEND") { e.currentTarget.blur(); return; }
+              scrollInputIntoView(e.currentTarget);
+            }}
+            readOnly={type === "STOCK" && stockTradeType !== "DIVIDEND"}
+            style={{
+              ...amountInputStyle,
+              color: activeColor,
+              ...(type === "STOCK" && stockTradeType !== "DIVIDEND"
+                ? { opacity: 0.85, cursor: "default" }
+                : {}),
+            }}
           />
         </div>
-        <div style={{ fontSize: 12, color: `${activeColor}99`, fontWeight: 700, marginTop: 2 }}>원</div>
+        <div style={{ fontSize: 12, color: `${activeColor}99`, fontWeight: 700, marginTop: 2 }}>
+          원
+          {type === "STOCK" && stockTradeType !== "DIVIDEND" && (
+            <span style={{ marginLeft: 6, fontSize: 10, color: `${activeColor}70`, fontWeight: 600 }}>
+              수량×단가 자동계산
+            </span>
+          )}
+        </div>
       </div>
 
       {/* 사용자 + 날짜 한 줄 */}
@@ -1337,7 +1433,7 @@ console.log("MATCH_DEBUG", {
         flexDirection: "column",
         gap: 14,
       }}>
-      {type !== "STOCK" && type !== "TRANSFER" && (
+      {type !== "STOCK" && (
         <section>
           <label style={{ ...compactLabelStyle, color: `${activeColor}99` }}>카테고리</label>
 
@@ -1372,7 +1468,13 @@ console.log("MATCH_DEBUG", {
                   <button
                     key={item.name}
                     type="button"
-                    onClick={() => setCategory(item.name)}
+                    onClick={() => {
+                      setCategory(item.name);
+                      // 카드 선결제 카테고리 벗어나면 toAccountId 초기화
+                      if (item.name !== "카드 전월 선결제" && item.name !== "카드 이번달 선결제") {
+                        setToAccountId("");
+                      }
+                    }}
                     onTouchStart={() => {
                       // 커스텀 카테고리만 길게 누르기 활성화
                       const customCat = customCategories.find(c => c.name === item.name);
@@ -1709,15 +1811,15 @@ console.log("MATCH_DEBUG", {
         {/* 수량 / 단가 */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           {[
-            { value: stockQuantity, setter: setStockQuantity, placeholder: "수량" },
-            { value: stockPrice,    setter: setStockPrice,    placeholder: "단가" },
+            { value: stockQuantity, setter: setStockQuantity, placeholder: "수량 (주)" },
+            { value: stockPrice,    setter: setStockPrice,    placeholder: "단가 (원)" },
           ].map(({ value, setter, placeholder }) => (
             <input
               key={placeholder}
-              value={value}
-              onChange={(e) => setter(e.target.value)}
+              value={value ? Number(value).toLocaleString() : ""}
+              onChange={(e) => setter(e.target.value.replace(/[^0-9.]/g, ""))}
               placeholder={placeholder}
-              type="number"
+              inputMode="numeric"
               style={{
                 ...categoryNameInputStyle,
                 border: `1px solid ${activeColor}28`,
@@ -1758,6 +1860,12 @@ console.log("MATCH_DEBUG", {
 
     {type === "TRANSFER" ? (
       <div style={{ display: "grid", gap: 10 }}>
+        {/* 카드 선결제 안내 */}
+        {(category === "카드 전월 선결제" || category === "카드 이번달 선결제") && (
+          <div style={{ padding: "8px 12px", borderRadius: 12, background: "#FFF7ED", border: "1px solid #FED7AA", fontSize: 11, color: "#F97316", fontWeight: 700 }}>
+            💳 {category === "카드 전월 선결제" ? "전월 카드 예상납부액에서 차감됩니다" : "이번달 카드 예상납부액에서 차감됩니다"}
+          </div>
+        )}
         <AccountSelect
           label="출금"
           value={fromAccountId}
@@ -1766,9 +1874,13 @@ console.log("MATCH_DEBUG", {
           activeColor={activeColor}
         />
         <AccountSelect
-          label="입금"
+          label={category === "카드 전월 선결제" || category === "카드 이번달 선결제" ? "카드 계좌" : "입금"}
           value={toAccountId}
-          accounts={accounts}
+          accounts={
+            category === "카드 전월 선결제" || category === "카드 이번달 선결제"
+              ? accounts.filter((a: any) => a.type === "CARD")
+              : accounts
+          }
           onChange={setToAccountId}
           activeColor={activeColor}
         />

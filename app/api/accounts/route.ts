@@ -31,25 +31,37 @@ export async function GET(req: NextRequest) {
         const nextStart = new Date(year, month, endDay + 1);
         const nextEnd = new Date(year, month + 1, endDay, 23, 59, 59);
 
-        const [thisTxs, nextTxs, thisPaidTxs, nextPaidTxs] = await Promise.all([
+        const [thisTxs, nextTxs, thisPaidTxs, nextPaidTxs, thisPrepaid, nextPrepaid] = await Promise.all([
           prisma.transaction.findMany({
             where: { familyId, type: "EXPENSE", fromAccountId: account.id, transactionAt: { gte: thisStart, lte: thisEnd } },
           }),
           prisma.transaction.findMany({
             where: { familyId, type: "EXPENSE", fromAccountId: account.id, transactionAt: { gte: nextStart, lte: nextEnd } },
           }),
+          // 날짜 범위 기반 일반 이체 납부
           prisma.transaction.findMany({
             where: { familyId, type: "TRANSFER", toAccountId: account.id, transactionAt: { gte: thisStart, lte: thisEnd } },
           }),
           prisma.transaction.findMany({
             where: { familyId, type: "TRANSFER", toAccountId: account.id, transactionAt: { gte: nextStart, lte: nextEnd } },
           }),
+          // 카테고리 기반 선결제 (날짜 무관하게 해당 사이클에 차감)
+          prisma.transaction.findMany({
+            where: { familyId, type: "TRANSFER", toAccountId: account.id, category: "카드 전월 선결제" },
+          }),
+          prisma.transaction.findMany({
+            where: { familyId, type: "TRANSFER", toAccountId: account.id, category: "카드 이번달 선결제" },
+          }),
         ]);
 
         const thisExpense = thisTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
         const nextExpense = nextTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
-        const thisPaid = thisPaidTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
-        const nextPaid = nextPaidTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
+        const thisPaid =
+          thisPaidTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0) +
+          thisPrepaid.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
+        const nextPaid =
+          nextPaidTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0) +
+          nextPrepaid.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
 
         return {
           ...account,
@@ -140,25 +152,19 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json(account);
   } catch (error) {
-    console.error(error);
+    console.error("ACCOUNTS_PATCH_ERROR", error);
     return NextResponse.json({ error: "계좌 수정 실패" }, { status: 500 });
   }
 }
 
 export async function DELETE(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const id = Number(searchParams.get("id"));
-
-    if (!id) {
-      return NextResponse.json({ error: "계좌 ID 필요" }, { status: 400 });
-    }
-
+    const id = Number(req.nextUrl.searchParams.get("id"));
+    if (!id) return NextResponse.json({ error: "id 필요" }, { status: 400 });
     await prisma.account.delete({ where: { id } });
-
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error(error);
+    console.error("ACCOUNTS_DELETE_ERROR", error);
     return NextResponse.json({ error: "계좌 삭제 실패" }, { status: 500 });
   }
 }
