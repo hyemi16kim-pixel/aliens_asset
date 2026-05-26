@@ -135,10 +135,12 @@ const customIconMap = {
   ],
 };
 
+// EXPENSE/INCOME: DB 카테고리만 표시 (하드코딩 제외)
+// TRANSFER: DB가 비어있으면 기본 3개 fallback (loadCategories에서 처리)
 const categoryMap: Record<string, CategoryItem[]> = {
-  EXPENSE: customIconMap.EXPENSE.map(({ key, icon }) => ({ name: key, icon })),
-  INCOME: customIconMap.INCOME.map(({ key, icon }) => ({ name: key, icon })),
-  TRANSFER: customIconMap.TRANSFER.map(({ key, icon }) => ({ name: key, icon })),
+  EXPENSE: [],
+  INCOME: [],
+  TRANSFER: [],
   STOCK: customIconMap.STOCK.map(({ key, icon }) => ({ name: key, icon })),
 };
 
@@ -499,11 +501,16 @@ const parseImportedMessage = (item: ImportedMessage) => {
               self.findIndex((item) => item.name === cat.name) === index
           );
 
-          setCustomCategories(customCats);
+          // TRANSFER: DB에 카테고리 없으면 customIconMap 기본값 사용
+          const finalCats = (type === "TRANSFER" && serverCategories.length === 0 && customCats.length === 0)
+            ? customIconMap.TRANSFER.map(({ key }) => ({ id: 0, name: key, iconKey: key, emoji: "↔️" }))
+            : customCats;
+
+          setCustomCategories(finalCats);
 
           // 첫 번째 카테고리로 초기화 (category가 비어있을 때)
-          if (!category && customCats.length > 0) {
-            setCategory(customCats[0].name);
+          if (!category && finalCats.length > 0) {
+            setCategory(finalCats[0].name);
           }
         }
         
