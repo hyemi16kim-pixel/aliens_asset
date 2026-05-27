@@ -1360,7 +1360,9 @@ console.log("MATCH_DEBUG", {
             value={amount ? Number(amount).toLocaleString() : ""}
             onChange={(e) => {
               if (type === "STOCK" && stockTradeType !== "DIVIDEND") return;
-              setAmount(e.target.value.replace(/[^0-9]/g, ""));
+              const v = e.target.value.replace(/[^0-9]/g, "");
+              setAmount(v);
+              if (stockTradeType === "DIVIDEND") setDividendAmount(v);
             }}
             onFocus={(e) => {
               if (type === "STOCK" && stockTradeType !== "DIVIDEND") { e.currentTarget.blur(); return; }
@@ -1741,7 +1743,7 @@ console.log("MATCH_DEBUG", {
         {/* 배당금 금액 */}
         <input
           value={dividendAmount}
-          onChange={(e) => setDividendAmount(e.target.value)}
+          onChange={(e) => { setDividendAmount(e.target.value); setAmount(e.target.value.replace(/[^0-9]/g, "")); }}
           placeholder="배당금 금액 (원)"
           type="number"
           style={{
