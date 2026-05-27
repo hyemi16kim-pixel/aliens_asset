@@ -117,7 +117,6 @@ export default function HomePage() {
   const [goals, setGoals] = useState<any[]>([]);
   const [showSplash, setShowSplash] = useState(false);
   const [showMemo, setShowMemo] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
     const hasShownSplash = sessionStorage.getItem("alien_splash_shown");
@@ -167,21 +166,17 @@ export default function HomePage() {
   const familyId = getCurrentFamilyId();
 
   return (
-    <main {...swipe} onScroll={(e) => setScrolled((e.currentTarget as HTMLElement).scrollTop > 50)} style={{ height: "100dvh", overflowY: "auto", background: "#F7F5FF", padding: "12px 10px 0", boxSizing: "border-box", display: "flex", flexDirection: "column" }}>
-      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-
-        <header style={{
-          position: "sticky", top: 0, zIndex: 50, flexShrink: 0,
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "calc(env(safe-area-inset-top) + 8px) 4px 10px",
-          background: scrolled
-            ? "rgba(245,242,255,0.94)"
-            : "linear-gradient(135deg, #ede9fe 0%, #f0ebff 50%, #F7F5FF 100%)",
-          backdropFilter: scrolled ? "blur(14px)" : "none",
-          WebkitBackdropFilter: scrolled ? "blur(14px)" : "none",
-          borderBottom: scrolled ? "1px solid rgba(167,139,250,0.18)" : "none",
-          transition: "background 0.3s, backdrop-filter 0.3s, border-bottom 0.3s",
-        }}>
+    <>
+      {/* ── 고정 헤더 ── */}
+      <header style={{
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 50,
+        background: "rgba(255,255,255,0.95)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        borderBottom: "1px solid #F0EAFF",
+        display: "flex", justifyContent: "center",
+      }}>
+        <div style={{ width: "100%", maxWidth: 390, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "calc(env(safe-area-inset-top) + 10px) 14px 10px" }}>
           <div>
             <div style={{ fontSize: 11, color: "#A78BFA", fontWeight: 700, marginBottom: 3, letterSpacing: 0.3 }}>
               {new Date().toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" })}
@@ -203,21 +198,22 @@ export default function HomePage() {
               {"👽"}
             </Link>
           </div>
-        </header>
-
-        <div style={{ flexShrink: 0 }}>
-          <HeroSlider data={dashboard} goals={goals} />
         </div>
-        <div style={{ flex: 1, minHeight: 200, overflow: "hidden" }}>
+      </header>
+
+      {/* ── 스크롤 콘텐츠 ── */}
+      <main {...swipe} style={{ minHeight: "100vh", background: "#F7F5FF", padding: "calc(env(safe-area-inset-top) + 82px) 10px 0", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 10 }}>
+        <HeroSlider data={dashboard} goals={goals} />
+        <div style={{ minHeight: 200 }}>
           <RecentTransactions items={dashboard?.recentTransactions || []} />
         </div>
         <BottomNav />
-        <div style={{ flexShrink: 0, height: "calc(76px + env(safe-area-inset-bottom))" }} />
-      </div>
+        <div style={{ height: "calc(76px + env(safe-area-inset-bottom))", flexShrink: 0 }} />
+      </main>
 
       {showMemo && familyId && (
         <MemoSheet familyId={familyId} onClose={() => setShowMemo(false)} />
       )}
-    </main>
+    </>
   );
 }
