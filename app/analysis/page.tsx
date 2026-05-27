@@ -1482,7 +1482,7 @@ const containerStyle = {
   display: "flex",
   flexDirection: "column",
   gap: 14,
-  padding: "calc(env(safe-area-inset-top) + 130px) 16px 0",
+  padding: "calc(env(safe-area-inset-top) + 105px) 16px 0",
 } as const;
 
 const tabStyle = {

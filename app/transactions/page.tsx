@@ -511,7 +511,7 @@ function TransactionsContent() {
       style={{
         minHeight: "100vh",
         background: `linear-gradient(160deg, ${activeColor}28 0%, ${activeColor}10 30%, #f8f6ff 65%, #ffffff 100%)`,
-        padding: "calc(env(safe-area-inset-top) + 110px) 0 calc(90px + env(safe-area-inset-bottom))",
+        padding: "calc(env(safe-area-inset-top) + 90px) 0 calc(90px + env(safe-area-inset-bottom))",
         display: "flex",
         justifyContent: "center",
         transition: "background 0.4s ease",
@@ -1099,6 +1099,4 @@ export default function TransactionsPage() {
   return (
     <Suspense fallback={<div style={{ minHeight: "100vh", background: "#F7F5FF" }} />}>
       <TransactionsContent />
-    </Suspense>
-  );
-}
+    </Su
