@@ -1,8 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import AndroidBackHandler from "@/components/AndroidBackHandler";
-import PreventPullToRefresh from "@/components/PreventPullToRefresh";
+import ClientProviders from "@/components/ClientProviders";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -49,9 +48,9 @@ export default function RootLayout({
           padding: 0,
         }}
       >
-        <AndroidBackHandler />
-        <PreventPullToRefresh />
-        {children}
+        <ClientProviders>
+          {children}
+        </ClientProviders>
       </body>
     </html>
   );

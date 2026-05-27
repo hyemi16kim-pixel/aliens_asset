@@ -70,6 +70,7 @@ import {
 } from "@/components/lib/monthRange";
 import { getCurrentFamilyId } from "@/components/lib/familyCode";
 import { useSwipeNav } from "@/components/lib/useSwipeNav";
+import { useModalBack } from "@/components/lib/BackStackContext";
 
 type TransactionType = "INCOME" | "EXPENSE" | "TRANSFER";
 
@@ -248,6 +249,9 @@ function TransactionsContent() {
   const [editOwner, setEditOwner] = useState("공동");
   const [editDate, setEditDate] = useState("");
   const [editMemo, setEditMemo] = useState("");
+
+  useModalBack(showFilterModal, () => setShowFilterModal(false));
+  useModalBack(!!selectedTx, () => setSelectedTx(null));
 
   const activeColor = typeColorMap[filterType] || theme.colors.primary;
   const editActiveColor = typeColorMap[editType] || theme.colors.primary;

@@ -58,6 +58,7 @@ import {
   RefreshCw,
   ShoppingCart,
 } from "lucide-react";
+import { useModalBack } from "@/components/lib/BackStackContext";
 
 type TransactionType = "EXPENSE" | "INCOME" | "TRANSFER" | "STOCK";
 
@@ -236,6 +237,8 @@ export default function AddTransactionPage() {
   const dragStartX = useRef(0);
   const dragScrollLeft = useRef(0);
   const isDragging = useRef(false);
+  useModalBack(showAddCategory, () => setShowAddCategory(false));
+
 type ImportedMessage = {
   receivedAt: string;
   id: string;

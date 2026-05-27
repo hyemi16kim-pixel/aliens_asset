@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
+import { useBackStack } from "@/components/lib/BackStackContext";
 
 /**
  * Android 시스템 뒤로가기 버튼 처리
@@ -13,6 +14,7 @@ import { Capacitor } from "@capacitor/core";
  */
 export function useAndroidBack() {
   const router = useRouter();
+  const { handleBack } = useBackStack();
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -24,6 +26,9 @@ export function useAndroidBack() {
         const { App } = await import("@capacitor/app");
 
         const handle = await App.addListener("backButton", ({ canGoBack }) => {
+          // 열린 모달이 있으면 모달 먼저 닫기
+          if (handleBack()) return;
+
           if (canGoBack) {
             router.back();
           } else {

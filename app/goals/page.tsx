@@ -7,6 +7,7 @@ import BottomNav from "@/components/navigation/BottomNav";
 import { theme } from "@/components/lib/theme";
 import { getCurrentFamilyId, getCurrentUserId } from "@/components/lib/familyCode";
 import { ChevronLeft, Plus, X, Trash2 } from "lucide-react";
+import { useModalBack } from "@/components/lib/BackStackContext";
 
 type Goal = {
   id: number;
@@ -109,6 +110,9 @@ export default function GoalsPage() {
 
   const [showCalc, setShowCalc] = useState<"current" | "target" | "debtRemaining" | null>(null);
 
+
+  useModalBack(isOpen && showCalc !== null, () => setShowCalc(null));
+  useModalBack(isOpen, () => closeModal());
   const router = useRouter();
   const pageSwipe = useSwipeNav({ onSwipeRight: () => router.push("/analysis?tab=TREND") });
 
