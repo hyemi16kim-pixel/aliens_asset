@@ -511,7 +511,7 @@ function TransactionsContent() {
       style={{
         minHeight: "100vh",
         background: `linear-gradient(160deg, ${activeColor}28 0%, ${activeColor}10 30%, #f8f6ff 65%, #ffffff 100%)`,
-        padding: "calc(env(safe-area-inset-top) + 100px) 0 calc(90px + env(safe-area-inset-bottom))",
+        padding: "calc(env(safe-area-inset-top) + 110px) 0 calc(90px + env(safe-area-inset-bottom))",
         display: "flex",
         justifyContent: "center",
         transition: "background 0.4s ease",
@@ -520,11 +520,11 @@ function TransactionsContent() {
       <div style={{ width: "100%", maxWidth: 390, display: "flex", flexDirection: "column" }}>
 
         {/* ── 헤더 + 필터 (고정) ── */}
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderBottom: "1px solid #F0EAFF", display: "flex", justifyContent: "center" }}>
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, background: "rgba(247, 245, 255, 0.85)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderBottom: "1px solid #F0EAFF", display: "flex", justifyContent: "center" }}>
         <div style={{ width: "100%", maxWidth: 390 }}>
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "calc(env(safe-area-inset-top) + 12px) 18px 8px",
+          padding: "calc(env(safe-area-inset-top) + 12px) 18px 6px",
         }}>
           <button onClick={() => router.back()} style={{ border: "none", background: "transparent", cursor: "pointer", padding: 4, display: "grid", placeItems: "center" }}>
             <ChevronLeft size={22} color="#2D2545" />
@@ -534,7 +534,7 @@ function TransactionsContent() {
         </div>
 
         {/* ── 필터 pills ── */}
-        <div style={{ display: "flex", gap: 6, margin: "0 16px", paddingBottom: 12 }}>
+        <div style={{ display: "flex", gap: 6, margin: "0 16px", paddingTop: 8, paddingBottom: 12 }}>
           {(["CALENDAR", "ALL", "INCOME", "EXPENSE", "TRANSFER", "STOCK"] as const).map((f) => {
             const labels: Record<string, string> = { CALENDAR: "📅", ALL: "전체", INCOME: "수입", EXPENSE: "지출", TRANSFER: "이체", STOCK: "주식" };
             const color = typeColorMap[f];

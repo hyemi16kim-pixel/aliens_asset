@@ -111,7 +111,7 @@ export async function GET(req: NextRequest) {
         orderBy: {
           transactionAt: "desc",
         },
-        take: 20,
+        take: 10,
       }),
 
       prisma.transaction.findMany({

@@ -170,7 +170,7 @@ export default function HomePage() {
       {/* ── 고정 헤더 ── */}
       <header style={{
         position: "fixed", top: 0, left: 0, right: 0, zIndex: 50,
-        background: "rgba(255,255,255,0.95)",
+        background: "rgba(247, 245, 255, 0.85)",
         backdropFilter: "blur(12px)",
         WebkitBackdropFilter: "blur(12px)",
         borderBottom: "1px solid #F0EAFF",
