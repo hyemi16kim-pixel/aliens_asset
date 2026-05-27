@@ -422,7 +422,8 @@ const getPercent = (owner: string) => {
   return (
     <main {...pageSwipe} style={pageStyle}>
       <div style={containerStyle}>
-        <h1 style={{ fontSize: 22, fontWeight: 900, color: "#2D2545", letterSpacing: -0.5, margin: 0, padding: "8px 2px 2px" }}>분석 🔭</h1>
+        <div style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderBottom: "1px solid #F0EAFF", margin: "0 -16px", padding: "calc(env(safe-area-inset-top) + 10px) 16px 12px" }}>
+        <h1 style={{ fontSize: 22, fontWeight: 900, color: "#2D2545", letterSpacing: -0.5, margin: "0 0 10px" }}>분석 🔭</h1>
 
         <div style={tabStyle}>
           <button onClick={() => setTab("ASSET")} style={tabButtonStyle}>
@@ -437,6 +438,7 @@ const getPercent = (owner: string) => {
             {tab === "TREND" ? <strong style={activeTabStyle}>추세</strong> : "추세"}
           </button>
         </div>
+        </div>{/* /sticky header */}
 
 {tab === "SPENDING" && (() => {
   const baseMonth = getBaseMonthByStartDay(new Date(), monthStartDay);

@@ -169,7 +169,7 @@ export default function HomePage() {
     <main {...swipe} style={{ height: "100dvh", overflowY: "auto", background: "#F7F5FF", padding: "12px 10px 0", boxSizing: "border-box", display: "flex", flexDirection: "column" }}>
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 10 }}>
 
-        <header style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 4px 4px" }}>
+        <header style={{ position: "sticky", top: 0, zIndex: 50, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "calc(env(safe-area-inset-top) + 8px) 4px 10px", background: "rgba(247,245,255,0.92)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}>
           <div>
             <div style={{ fontSize: 11, color: "#A78BFA", fontWeight: 700, marginBottom: 3, letterSpacing: 0.3 }}>
               {new Date().toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" })}

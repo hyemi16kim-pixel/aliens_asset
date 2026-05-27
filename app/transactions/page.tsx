@@ -519,10 +519,11 @@ function TransactionsContent() {
     >
       <div style={{ width: "100%", maxWidth: 390, display: "flex", flexDirection: "column" }}>
 
-        {/* ── 헤더 ── */}
+        {/* ── 헤더 + 필터 (고정) ── */}
+        <div style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderBottom: "1px solid #F0EAFF" }}>
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "16px 18px 10px",
+          padding: "calc(env(safe-area-inset-top) + 12px) 18px 8px",
         }}>
           <button onClick={() => router.back()} style={{ border: "none", background: "transparent", cursor: "pointer", padding: 4, display: "grid", placeItems: "center" }}>
             <ChevronLeft size={22} color="#2D2545" />
@@ -532,7 +533,7 @@ function TransactionsContent() {
         </div>
 
         {/* ── 필터 pills ── */}
-        <div style={{ display: "flex", gap: 6, margin: "0 16px", paddingBottom: 14 }}>
+        <div style={{ display: "flex", gap: 6, margin: "0 16px", paddingBottom: 12 }}>
           {(["CALENDAR", "ALL", "INCOME", "EXPENSE", "TRANSFER", "STOCK"] as const).map((f) => {
             const labels: Record<string, string> = { CALENDAR: "📅", ALL: "전체", INCOME: "수입", EXPENSE: "지출", TRANSFER: "이체", STOCK: "주식" };
             const color = typeColorMap[f];
@@ -549,6 +550,7 @@ function TransactionsContent() {
             );
           })}
         </div>
+        </div>{/* /sticky header */}
 
         {/* ── 월 이동 + 요약 카드 ── */}
         <div style={{ padding: "0 16px 14px" }}>

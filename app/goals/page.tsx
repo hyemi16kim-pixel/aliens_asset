@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSwipeNav } from "@/components/lib/useSwipeNav";
@@ -443,9 +444,9 @@ function GoalCard({ goal, money, getDday, onClick, onPin }: {
   );
 }
 
-const pageStyle = { minHeight: "100vh", background: "#FFFFFF", padding: "14px 12px calc(90px + env(safe-area-inset-bottom))", display: "flex", justifyContent: "center" } as const;
+const pageStyle = { minHeight: "100vh", background: "#FFFFFF", padding: "0 12px calc(90px + env(safe-area-inset-bottom))", display: "flex", justifyContent: "center" } as const;
 const containerStyle = { width: "100%", maxWidth: 390, display: "flex", flexDirection: "column", gap: 14 } as const;
-const headerStyle = { display: "flex", alignItems: "center", justifyContent: "space-between" } as const;
+const headerStyle: React.CSSProperties = { position: "sticky", top: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "calc(env(safe-area-inset-top) + 12px) 0 12px", background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderBottom: "1px solid #F0EAFF", margin: "0 -12px", paddingLeft: "12px", paddingRight: "12px" };
 const iconButtonStyle = { border: "none", background: "transparent", padding: 0, cursor: "pointer" } as const;
 const summaryCardStyle = { background: `linear-gradient(135deg, ${theme.colors.primary} 0%, #B6AAFF 100%)`, color: "white", borderRadius: 22, padding: 18, display: "flex", justifyContent: "space-between", alignItems: "center" } as const;
 const sectionLabelStyle = { fontSize: 13, fontWeight: 900, color: theme.colors.subtext, paddingLeft: 4 } as const;
