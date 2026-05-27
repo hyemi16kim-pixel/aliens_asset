@@ -511,7 +511,7 @@ function TransactionsContent() {
       style={{
         minHeight: "100vh",
         background: `linear-gradient(160deg, ${activeColor}28 0%, ${activeColor}10 30%, #f8f6ff 65%, #ffffff 100%)`,
-        padding: "0 0 calc(90px + env(safe-area-inset-bottom))",
+        padding: "calc(env(safe-area-inset-top) + 100px) 0 calc(90px + env(safe-area-inset-bottom))",
         display: "flex",
         justifyContent: "center",
         transition: "background 0.4s ease",
@@ -520,7 +520,8 @@ function TransactionsContent() {
       <div style={{ width: "100%", maxWidth: 390, display: "flex", flexDirection: "column" }}>
 
         {/* ── 헤더 + 필터 (고정) ── */}
-        <div style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderBottom: "1px solid #F0EAFF" }}>
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderBottom: "1px solid #F0EAFF", display: "flex", justifyContent: "center" }}>
+        <div style={{ width: "100%", maxWidth: 390 }}>
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "calc(env(safe-area-inset-top) + 12px) 18px 8px",
@@ -550,7 +551,8 @@ function TransactionsContent() {
             );
           })}
         </div>
-        </div>{/* /sticky header */}
+        </div>{/* /maxWidth */}
+        </div>{/* /fixed header */}
 
         {/* ── 월 이동 + 요약 카드 ── */}
         <div style={{ padding: "0 16px 14px" }}>

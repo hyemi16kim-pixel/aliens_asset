@@ -422,7 +422,8 @@ const getPercent = (owner: string) => {
   return (
     <main {...pageSwipe} style={pageStyle}>
       <div style={containerStyle}>
-        <div style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderBottom: "1px solid #F0EAFF", margin: "0 -16px", padding: "calc(env(safe-area-inset-top) + 10px) 16px 12px" }}>
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderBottom: "1px solid #F0EAFF", display: "flex", justifyContent: "center" }}>
+        <div style={{ width: "100%", maxWidth: 390, padding: "calc(env(safe-area-inset-top) + 10px) 16px 12px" }}>
         <h1 style={{ fontSize: 22, fontWeight: 900, color: "#2D2545", letterSpacing: -0.5, margin: "0 0 10px" }}>분석 🔭</h1>
 
         <div style={tabStyle}>
@@ -438,7 +439,8 @@ const getPercent = (owner: string) => {
             {tab === "TREND" ? <strong style={activeTabStyle}>추세</strong> : "추세"}
           </button>
         </div>
-        </div>{/* /sticky header */}
+        </div>{/* /maxWidth */}
+        </div>{/* /fixed header */}
 
 {tab === "SPENDING" && (() => {
   const baseMonth = getBaseMonthByStartDay(new Date(), monthStartDay);
@@ -1480,7 +1482,7 @@ const containerStyle = {
   display: "flex",
   flexDirection: "column",
   gap: 14,
-  padding: "16px 16px 0",
+  padding: "calc(env(safe-area-inset-top) + 110px) 16px 0",
 } as const;
 
 const tabStyle = {
