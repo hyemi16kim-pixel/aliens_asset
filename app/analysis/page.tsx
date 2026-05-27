@@ -61,6 +61,7 @@ import {
   Store,
   ShoppingCart,
 } from "lucide-react";
+import { useModalBack } from "@/components/lib/BackStackContext";
 
 // English icon key → Lucide component (profile page stores English keys in DB)
 const englishIconMap: Record<string, React.ElementType> = {
@@ -239,6 +240,9 @@ function AnalysisPageContent() {
   const [cardCycleStartDay, setCardCycleStartDay] = useState("");
   const [cardCycleEndDay, setCardCycleEndDay] = useState("");
   const [selectedStockAccount, setSelectedStockAccount] = useState<Account | null>(null);
+
+  useModalBack(showAccountModal, () => { setShowAccountModal(false); });
+  useModalBack(!!selectedStockAccount, () => setSelectedStockAccount(null));
   const [trendMoneyType, setTrendMoneyType] = useState<"EXPENSE" | "INCOME">("EXPENSE");
   const [selectedTrendCategory, setSelectedTrendCategory] = useState<string | null>(null);
   const [budgets, setBudgets] = useState<Record<string, number>>({});
