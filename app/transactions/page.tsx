@@ -1099,4 +1099,6 @@ export default function TransactionsPage() {
   return (
     <Suspense fallback={<div style={{ minHeight: "100vh", background: "#F7F5FF" }} />}>
       <TransactionsContent />
-    </Su
+    </Suspense>
+  );
+}
