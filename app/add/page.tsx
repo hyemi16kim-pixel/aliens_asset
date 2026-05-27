@@ -2280,7 +2280,7 @@ const getAccountIcon = (type: string) => {
 const pageStyle = {
   minHeight: "100vh",
   background: "#FFFFFF",
-  padding: "16px 18px calc(180px + env(safe-area-inset-bottom))",
+  padding: "calc(64px + env(safe-area-inset-top)) 18px calc(180px + env(safe-area-inset-bottom))",
   display: "flex",
   justifyContent: "center",
 } as const;
@@ -2304,11 +2304,20 @@ const compactLabelStyle = {
 } as const;
 
 const headerStyle: React.CSSProperties = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  right: 0,
+  zIndex: 100,
   display: "grid",
   gridTemplateColumns: "36px 1fr 86px",
   alignItems: "center",
   gap: 8,
-  marginBottom: 20,
+  padding: "calc(env(safe-area-inset-top) + 12px) 18px 12px",
+  background: "rgba(255,255,255,0.95)",
+  backdropFilter: "blur(12px)",
+  WebkitBackdropFilter: "blur(12px)",
+  borderBottom: "1px solid #F0EAFF",
 };
 
 const iconButtonStyle = {
