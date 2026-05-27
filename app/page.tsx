@@ -117,6 +117,7 @@ export default function HomePage() {
   const [goals, setGoals] = useState<any[]>([]);
   const [showSplash, setShowSplash] = useState(false);
   const [showMemo, setShowMemo] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
     const hasShownSplash = sessionStorage.getItem("alien_splash_shown");
@@ -166,10 +167,19 @@ export default function HomePage() {
   const familyId = getCurrentFamilyId();
 
   return (
-    <main {...swipe} style={{ height: "100dvh", overflowY: "auto", background: "#F7F5FF", padding: "12px 10px 0", boxSizing: "border-box", display: "flex", flexDirection: "column" }}>
+    <main {...swipe} onScroll={(e) => setScrolled((e.currentTarget as HTMLElement).scrollTop > 50)} style={{ height: "100dvh", overflowY: "auto", background: "#F7F5FF", padding: "12px 10px 0", boxSizing: "border-box", display: "flex", flexDirection: "column" }}>
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 10 }}>
 
-        <header style={{ position: "sticky", top: 0, zIndex: 50, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "calc(env(safe-area-inset-top) + 8px) 4px 10px", background: "rgba(247,245,255,0.92)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}>
+        <header style={{
+          position: "sticky", top: 0, zIndex: 50, flexShrink: 0,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "calc(env(safe-area-inset-top) + 8px) 4px 10px",
+          background: scrolled ? "rgba(247,245,255,0.93)" : "transparent",
+          backdropFilter: scrolled ? "blur(14px)" : "none",
+          WebkitBackdropFilter: scrolled ? "blur(14px)" : "none",
+          borderBottom: scrolled ? "1px solid rgba(167,139,250,0.15)" : "none",
+          transition: "background 0.25s, backdrop-filter 0.25s, border-bottom 0.25s",
+        }}>
           <div>
             <div style={{ fontSize: 11, color: "#A78BFA", fontWeight: 700, marginBottom: 3, letterSpacing: 0.3 }}>
               {new Date().toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" })}
