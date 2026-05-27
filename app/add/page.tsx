@@ -321,7 +321,7 @@ const parseImportedMessage = (item: ImportedMessage) => {
 
   // 날짜 자동 파싱: MM/DD HH:MM 또는 MM/DD 패턴
   const dateMatch = text.match(/(\d{2})\/(\d{2})(?:\s+(\d{2}):(\d{2}))?/);
-  let date = new Date().toISOString().slice(0, 10);
+  let date = new Date().toLocaleDateString("sv-SE");
   if (dateMatch) {
     const year = new Date().getFullYear();
     const mm = dateMatch[1];
@@ -371,7 +371,7 @@ const parseImportedMessage = (item: ImportedMessage) => {
 
   useEffect(() => {
     // 클라이언트에서만 실행 (hydration 이후)
-    setDate(new Date().toISOString().slice(0, 10));
+    setDate(new Date().toLocaleDateString("sv-SE"));
     const saved = localStorage.getItem("alien_used_import_ids");
     if (saved) {
       setUsedImportIds(JSON.parse(saved));
