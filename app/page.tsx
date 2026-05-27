@@ -174,11 +174,13 @@ export default function HomePage() {
           position: "sticky", top: 0, zIndex: 50, flexShrink: 0,
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "calc(env(safe-area-inset-top) + 8px) 4px 10px",
-          background: scrolled ? "rgba(247,245,255,0.93)" : "transparent",
+          background: scrolled
+            ? "rgba(245,242,255,0.94)"
+            : "linear-gradient(135deg, #ede9fe 0%, #f0ebff 50%, #F7F5FF 100%)",
           backdropFilter: scrolled ? "blur(14px)" : "none",
           WebkitBackdropFilter: scrolled ? "blur(14px)" : "none",
-          borderBottom: scrolled ? "1px solid rgba(167,139,250,0.15)" : "none",
-          transition: "background 0.25s, backdrop-filter 0.25s, border-bottom 0.25s",
+          borderBottom: scrolled ? "1px solid rgba(167,139,250,0.18)" : "none",
+          transition: "background 0.3s, backdrop-filter 0.3s, border-bottom 0.3s",
         }}>
           <div>
             <div style={{ fontSize: 11, color: "#A78BFA", fontWeight: 700, marginBottom: 3, letterSpacing: 0.3 }}>
