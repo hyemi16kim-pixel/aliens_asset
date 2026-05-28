@@ -54,12 +54,14 @@ public class KakaoNotificationListenerService extends NotificationListenerServic
             String existing = prefs.getString(PREFS_KEY, "[]");
             JSONArray arr = new JSONArray(existing);
 
-            // Dedup by notification key
-            Set<String> seenIds = new HashSet<>();
+            // Dedup by key + timestamp (같은 대화방이라도 시간이 다르면 새 메시지)
+            String dedupKey = id + "_" + ts;
+            Set<String> seenDedup = new HashSet<>();
             for (int i = 0; i < arr.length(); i++) {
-                seenIds.add(arr.getJSONObject(i).optString("id"));
+                JSONObject stored = arr.getJSONObject(i);
+                seenDedup.add(stored.optString("id") + "_" + stored.optLong("date"));
             }
-            if (seenIds.contains(id)) return;
+            if (seenDedup.contains(dedupKey)) return;
 
             // Build new entry
             JSONObject obj = new JSONObject();
