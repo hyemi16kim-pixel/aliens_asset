@@ -43,6 +43,12 @@ const getCardPaymentLabel = (monthOffset: number, day?: number | null) => {
   return `${String(target.getMonth() + 1).padStart(2, "0")}/${String(target.getDate()).padStart(2, "0")}`;
 };
 
+// 대금지급일 이후인지 여부 (같은 날 포함)
+const isAfterPaymentDay = (cardPaymentDay?: number | null) => {
+  if (!cardPaymentDay) return false;
+  return new Date().getDate() >= cardPaymentDay;
+};
+
 const paletteColorMap: Record<string, string> = {
   "#F6F0FF": "#8B5CF6",
   "#FFE4F1": "#EC4899",
@@ -163,7 +169,9 @@ export default function AssetAccountCard({ account, users = [], onClick, onDoubl
         {account.type === "STOCK"
           ? (stockLoading ? "로딩 중..." : money(stockSummary?.totalValue || 0))
           : account.type === "CARD"
-          ? money(-(account.nextPaymentAmount || 0))
+          ? money(-(isAfterPaymentDay(account.cardPaymentDay)
+              ? (account.nextMonthAmount || 0)
+              : (account.nextPaymentAmount || 0)))
           : account.type === "LOAN"
           ? money(account.balance === 0 ? 0 : -Math.abs(account.balance))
           : money(account.balance)}
@@ -171,12 +179,21 @@ export default function AssetAccountCard({ account, users = [], onClick, onDoubl
 
       {/* 하단 상세 */}
       <div style={{ marginTop: 8, fontSize: 11, color: "#6F5C86", lineHeight: 1.5 }}>
-        {account.type === "CARD" && (
-          <>
-            <div>{getCardPaymentLabel(0, account.cardPaymentDay)} 예상납부 {money(-(account.nextPaymentAmount || 0))}</div>
-            <div>{getCardPaymentLabel(1, account.cardPaymentDay)} 예상납부 {money(-(account.nextMonthAmount || 0))}</div>
-          </>
-        )}
+        {account.type === "CARD" && (() => {
+          const afterPayDay = isAfterPaymentDay(account.cardPaymentDay);
+          return (
+            <>
+              <div>
+                {getCardPaymentLabel(afterPayDay ? 1 : 0, account.cardPaymentDay)} 예상납부{" "}
+                {money(-(afterPayDay ? (account.nextMonthAmount || 0) : (account.nextPaymentAmount || 0)))}
+              </div>
+              <div>
+                {getCardPaymentLabel(afterPayDay ? 2 : 1, account.cardPaymentDay)} 예상납부{" "}
+                {money(-(afterPayDay ? 0 : (account.nextMonthAmount || 0)))}
+              </div>
+            </>
+          );
+        })()}
 
         {account.type === "LOAN" && (
           <>
