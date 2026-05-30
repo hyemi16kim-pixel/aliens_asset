@@ -169,9 +169,11 @@ export default function AssetAccountCard({ account, users = [], onClick, onDoubl
         {account.type === "STOCK"
           ? (stockLoading ? "로딩 중..." : money(stockSummary?.totalValue || 0))
           : account.type === "CARD"
-          ? money(-(isAfterPaymentDay(account.cardPaymentDay)
-              ? (account.nextMonthAmount || 0)
-              : (account.nextPaymentAmount || 0)))
+          ? (() => {
+              // 대금지급일 이후면 다음달 기준으로 전환
+              const showNext = isAfterPaymentDay(account.cardPaymentDay);
+              return money(-(showNext ? (account.nextMonthAmount || 0) : (account.nextPaymentAmount || 0)));
+            })()
           : account.type === "LOAN"
           ? money(account.balance === 0 ? 0 : -Math.abs(account.balance))
           : money(account.balance)}
@@ -180,16 +182,15 @@ export default function AssetAccountCard({ account, users = [], onClick, onDoubl
       {/* 하단 상세 */}
       <div style={{ marginTop: 8, fontSize: 11, color: "#6F5C86", lineHeight: 1.5 }}>
         {account.type === "CARD" && (() => {
-          const afterPayDay = isAfterPaymentDay(account.cardPaymentDay);
           return (
             <>
               <div>
-                {getCardPaymentLabel(afterPayDay ? 1 : 0, account.cardPaymentDay)} 예상납부{" "}
-                {money(-(afterPayDay ? (account.nextMonthAmount || 0) : (account.nextPaymentAmount || 0)))}
+                {getCardPaymentLabel(0, account.cardPaymentDay)} 예상납부{" "}
+                {money(-(account.nextPaymentAmount || 0))}
               </div>
               <div>
-                {getCardPaymentLabel(afterPayDay ? 2 : 1, account.cardPaymentDay)} 예상납부{" "}
-                {money(-(afterPayDay ? 0 : (account.nextMonthAmount || 0)))}
+                {getCardPaymentLabel(1, account.cardPaymentDay)} 예상납부{" "}
+                {money(-(account.nextMonthAmount || 0))}
               </div>
             </>
           );

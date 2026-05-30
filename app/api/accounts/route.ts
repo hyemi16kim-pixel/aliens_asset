@@ -19,17 +19,26 @@ export async function GET(req: NextRequest) {
 
     const withCardAmounts = await Promise.all(
       accounts.map(async (account: any) => {
-        if (account.type !== "CARD" || !account.cardCycleEndDay) {
+        if (account.type !== "CARD") {
           return account;
         }
 
-        const endDay = account.cardCycleEndDay;
+        const endDay = account.cardCycleEndDay as number | null;
 
-        const thisStart = new Date(year, month - 1, endDay + 1);
-        const thisEnd = new Date(year, month, endDay, 23, 59, 59);
-
-        const nextStart = new Date(year, month, endDay + 1);
-        const nextEnd = new Date(year, month + 1, endDay, 23, 59, 59);
+        // cardCycleEndDay 미설정 시 당월 1일~말일을 기본 사이클로 사용
+        let thisStart: Date, thisEnd: Date, nextStart: Date, nextEnd: Date;
+        if (endDay) {
+          thisStart = new Date(year, month - 1, endDay + 1);
+          thisEnd = new Date(year, month, endDay, 23, 59, 59);
+          nextStart = new Date(year, month, endDay + 1);
+          nextEnd = new Date(year, month + 1, endDay, 23, 59, 59);
+        } else {
+          // 사이클 미설정: 당월 1일 ~ 말일
+          thisStart = new Date(year, month, 1);
+          thisEnd = new Date(year, month + 1, 0, 23, 59, 59);
+          nextStart = new Date(year, month + 1, 1);
+          nextEnd = new Date(year, month + 2, 0, 23, 59, 59);
+        }
 
         const [thisTxs, nextTxs, thisPaidTxs, nextPaidTxs, thisPrepaid, nextPrepaid] = await Promise.all([
           prisma.transaction.findMany({

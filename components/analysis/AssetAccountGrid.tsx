@@ -236,9 +236,10 @@ export default function AssetAccountGrid({
     return new Date().getDate() >= cardPaymentDay;
   };
   const debtTotal = debtAccounts.reduce((sum, a) => {
-    if (a.type === "CARD") return sum + Math.abs(Number(
-      isAfterPaymentDay(a.cardPaymentDay) ? (a.nextMonthAmount || 0) : (a.nextPaymentAmount || 0)
-    ));
+    if (a.type === "CARD") {
+      const showNext = isAfterPaymentDay(a.cardPaymentDay);
+      return sum + Math.abs(Number(showNext ? (a.nextMonthAmount || 0) : (a.nextPaymentAmount || 0)));
+    }
     if (a.type === "LOAN") return sum + Math.abs(Number(a.balance || 0));
     return sum;
   }, 0);
