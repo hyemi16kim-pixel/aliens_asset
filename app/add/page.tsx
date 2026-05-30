@@ -1238,6 +1238,41 @@ console.log("MATCH_DEBUG", {
         >
           💬 카카오 권한
         </button>
+        <button
+          type="button"
+          onClick={async () => {
+            if (!(window as any).Capacitor?.isNativePlatform?.()) {
+              alert("Android 앱에서만 동작합니다.");
+              return;
+            }
+            try {
+              const list = await readRecentKakao(20);
+              if (!list || list.length === 0) {
+                alert("저장된 카카오 알림 없음.\n알림이 도착하면 자동 저장됩니다.");
+                return;
+              }
+              const preview = list.slice(0, 5).map((m: any, i: number) =>
+                `[${i + 1}] sender: "${m.sender}"\nbody: "${m.body?.slice(0, 60)}"`
+              ).join("\n\n");
+              alert(`저장된 카카오 알림 (최근 ${Math.min(5, list.length)}개):\n\n${preview}`);
+            } catch (e) {
+              alert("읽기 실패: " + e);
+            }
+          }}
+          style={{
+            border: "1px solid #B0A0FF",
+            background: "#F0EDFF",
+            color: "#5A40CC",
+            borderRadius: 999,
+            height: 22,
+            padding: "0 8px",
+            fontSize: 10,
+            fontWeight: 900,
+            cursor: "pointer",
+          }}
+        >
+          🔍 카카오 원시
+        </button>
       </div>
     </div>
 

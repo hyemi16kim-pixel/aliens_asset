@@ -34,10 +34,34 @@ public class KakaoNotificationListenerService extends NotificationListenerServic
         Notification notification = sbn.getNotification();
         Bundle extras = notification.extras;
 
-        String title   = extras.getString(Notification.EXTRA_TITLE, "");
-        String text    = "";
+        // title: EXTRA_TITLE 우선, 없으면 EXTRA_SUB_TEXT (일부 공식채널)
+        String title = extras.getString(Notification.EXTRA_TITLE, "");
+        if (title.isEmpty()) {
+            CharSequence sub = extras.getCharSequence(Notification.EXTRA_SUB_TEXT);
+            if (sub != null) title = sub.toString();
+        }
+
+        // text: EXTRA_TEXT → EXTRA_BIG_TEXT → EXTRA_TEXT_LINES 순으로 시도
+        String text = "";
         CharSequence cs = extras.getCharSequence(Notification.EXTRA_TEXT);
         if (cs != null) text = cs.toString();
+        if (text.isEmpty()) {
+            CharSequence bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT);
+            if (bigText != null) text = bigText.toString();
+        }
+        if (text.isEmpty()) {
+            CharSequence[] lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
+            if (lines != null && lines.length > 0) {
+                StringBuilder sb = new StringBuilder();
+                for (CharSequence line : lines) {
+                    if (line != null) {
+                        if (sb.length() > 0) sb.append(" ");
+                        sb.append(line);
+                    }
+                }
+                text = sb.toString();
+            }
+        }
 
         // title/text 모두 비어있으면 skip
         if (title.isEmpty() && text.isEmpty()) return;
