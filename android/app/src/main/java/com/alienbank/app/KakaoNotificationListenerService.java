@@ -39,8 +39,7 @@ public class KakaoNotificationListenerService extends NotificationListenerServic
         CharSequence cs = extras.getCharSequence(Notification.EXTRA_TEXT);
         if (cs != null) text = cs.toString();
 
-        // Skip group-summary notifications (they duplicate individual ones)
-        if ((notification.flags & Notification.FLAG_GROUP_SUMMARY) != 0) return;
+        // title/text 모두 비어있으면 skip
         if (title.isEmpty() && text.isEmpty()) return;
 
         String id = sbn.getKey();
@@ -54,14 +53,20 @@ public class KakaoNotificationListenerService extends NotificationListenerServic
             String existing = prefs.getString(PREFS_KEY, "[]");
             JSONArray arr = new JSONArray(existing);
 
-            // Dedup by key + timestamp (같은 대화방이라도 시간이 다르면 새 메시지)
+            // Dedup 1: key + timestamp (같은 대화방이라도 시간이 다르면 새 메시지)
             String dedupKey = id + "_" + ts;
+            // Dedup 2: sender + body 동일한 내용 중복 방지
+            //   (친구DM은 개별알림+그룹요약 두 개가 오는데 내용이 같으면 하나만 저장)
+            //   (공식채널은 그룹요약만 오므로 이 로직으로 정상 저장됨)
             Set<String> seenDedup = new HashSet<>();
+            Set<String> seenContent = new HashSet<>();
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject stored = arr.getJSONObject(i);
                 seenDedup.add(stored.optString("id") + "_" + stored.optLong("date"));
+                seenContent.add(stored.optString("sender") + "||" + stored.optString("body"));
             }
             if (seenDedup.contains(dedupKey)) return;
+            if (seenContent.contains(title + "||" + text)) return;
 
             // Build new entry
             JSONObject obj = new JSONObject();
