@@ -374,11 +374,16 @@ const parseImportedMessage = (item: ImportedMessage) => {
     setDate(new Date().toLocaleDateString("sv-SE"));
     const saved = localStorage.getItem("alien_used_import_ids");
     if (saved) {
-      setUsedImportIds(JSON.parse(saved));
+      // id|||rawText 포맷만 사용 (구버전 id 단독 항목은 무시)
+      const parsed: string[] = JSON.parse(saved);
+      setUsedImportIds(parsed.filter((v) => v.includes("|||")));
     }
     try {
       const hiddenSaved = localStorage.getItem("alien_hidden_import_ids");
-      if (hiddenSaved) setHiddenImportIds(JSON.parse(hiddenSaved));
+      if (hiddenSaved) {
+        const parsed: string[] = JSON.parse(hiddenSaved);
+        setHiddenImportIds(parsed.filter((v) => v.includes("|||")));
+      }
     } catch { /* ignore */ }
   }, []);
 
@@ -823,55 +828,8 @@ const openKakaoPermissionSettings = async () => {
 
 // 새 메시지만 추가로 불러오기 (기존 목록 유지, 새 것만 prepend)
 const refreshImportedMessages = async () => {
-  try {
-    setIsLoadingMessages(true);
-    // SMS는 id 기준, 카카오는 공식채널이 notification key를 재사용하므로 rawText 기준으로 중복 제거
-    const existingSmsIds = new Set(importedMessages.filter((m) => m.sourceType === "SMS").map((m) => m.id));
-    const existingKakaoTexts = new Set(importedMessages.filter((m) => m.sourceType === "KAKAO").map((m) => m.rawText));
-
-    const smsList = await readRecentSms(50);
-    const smsNew: ImportedMessage[] = smsList
-      .map((sms) => ({
-        receivedAt: new Date(sms.date).toISOString(),
-        id: `sms-${sms.id}`,
-        sourceType: "SMS" as const,
-        sourceKey: sms.address || "",
-        rawText: sms.body || "",
-      }))
-      .filter((m) => !existingSmsIds.has(m.id));
-
-    let kakaoNew: ImportedMessage[] = [];
-    try {
-      const granted = await isKakaoPermissionGranted();
-      if (granted) {
-        const kakaoList = await readRecentKakao(50);
-        kakaoNew = kakaoList
-          .map((k) => ({
-            receivedAt: new Date(k.date).toISOString(),
-            id: `kakao-${k.id}`,
-            sourceType: "KAKAO" as const,
-            sourceKey: k.sender || "",
-            rawText: k.body || "",
-          }))
-          .filter((m) => !existingKakaoTexts.has(m.rawText));
-      }
-    } catch {}
-
-    const newMessages = [...smsNew, ...kakaoNew].sort(
-      (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-    );
-
-    if (newMessages.length === 0) {
-      alert("새로 받은 문자/카카오 내역이 없습니다.");
-      return;
-    }
-    setImportedMessages((prev) => [...newMessages, ...prev]);
-  } catch (error) {
-    console.error(error);
-    alert("새로고침에 실패했습니다.");
-  } finally {
-    setIsLoadingMessages(false);
-  }
+  // 완전 재로드: 증분 방식의 중복 제거 문제를 피하기 위해 전체를 다시 불러옴
+  await loadImportedMessages();
 };
 
 
@@ -979,7 +937,7 @@ setOwner(myName);
     setToAccountId("");
   }, 0);
 
-setSelectedImportId(String(candidate.id));
+setSelectedImportId(`${candidate.id}|||${candidate.rawText}`);
 console.log("MATCH_DEBUG", {
   combinedText,
   rawText: candidate.rawText,
@@ -1259,7 +1217,8 @@ console.log("MATCH_DEBUG", {
                   const aliases: string[] = a.aliases?.length ? a.aliases : a.sourceKey ? [a.sourceKey] : [];
                   return aliases.some((alias: string) => combinedText.includes(alias.toLowerCase()));
                 });
-                return `[${i + 1}] sender: "${m.sender}"\nbody: "${m.body?.slice(0, 50)}"\n→ 매칭계좌: ${matchedAccount ? matchedAccount.name : "없음"}`;
+                const inList = importedMessages.some((im) => im.rawText === (m.body || ""));
+                return `[${i + 1}] sender: "${m.sender}"\nbody: "${m.body?.slice(0, 40)}"\n→ 매칭: ${matchedAccount ? matchedAccount.name : "없음"} | 목록포함: ${inList ? "✅" : "❌"}`;
               }).join("\n\n");
               alert(`저장된 카카오 알림 (최근 ${Math.min(5, list.length)}개):\n\n${preview}`);
             } catch (e) {
@@ -1295,8 +1254,8 @@ console.log("MATCH_DEBUG", {
   })
   .filter(
     (item) =>
-      !usedImportIds.includes(String(item.id)) &&
-      !hiddenImportIds.includes(String(item.id))
+      !usedImportIds.includes(`${item.id}|||${item.rawText}`) &&
+      !hiddenImportIds.includes(`${item.id}|||${item.rawText}`)
   )
   .sort(
     (a, b) =>
@@ -1312,8 +1271,8 @@ console.log("MATCH_DEBUG", {
       style={{
       ...importCardStyle,
       position: "relative",
-      opacity: usedImportIds.includes(item.id) ? 0.45 : 1,
-      filter: usedImportIds.includes(item.id)
+      opacity: usedImportIds.includes(`${item.id}|||${item.rawText}`) ? 0.45 : 1,
+      filter: usedImportIds.includes(`${item.id}|||${item.rawText}`)
         ? "grayscale(1)"
         : "none",
     }}
@@ -1321,7 +1280,7 @@ console.log("MATCH_DEBUG", {
       <button
   type="button"
   onClick={() => {
-    const next = [...hiddenImportIds, String(item.id)];
+    const next = [...hiddenImportIds, `${item.id}|||${item.rawText}`];
 
     setHiddenImportIds(next);
 
@@ -1364,8 +1323,8 @@ console.log("MATCH_DEBUG", {
         onClick={() => applyImportedCandidate(item)}
         style={{
           ...importApplyButtonStyle,
-          opacity: usedImportIds.includes(item.id) ? 0.5 : 1,
-          cursor: usedImportIds.includes(item.id)
+          opacity: usedImportIds.includes(`${item.id}|||${item.rawText}`) ? 0.5 : 1,
+          cursor: usedImportIds.includes(`${item.id}|||${item.rawText}`)
             ? "not-allowed"
             : "pointer",
         }}
