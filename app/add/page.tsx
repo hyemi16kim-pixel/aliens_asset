@@ -825,7 +825,9 @@ const openKakaoPermissionSettings = async () => {
 const refreshImportedMessages = async () => {
   try {
     setIsLoadingMessages(true);
-    const existingIds = new Set(importedMessages.map((m) => m.id));
+    // SMS는 id 기준, 카카오는 공식채널이 notification key를 재사용하므로 rawText 기준으로 중복 제거
+    const existingSmsIds = new Set(importedMessages.filter((m) => m.sourceType === "SMS").map((m) => m.id));
+    const existingKakaoTexts = new Set(importedMessages.filter((m) => m.sourceType === "KAKAO").map((m) => m.rawText));
 
     const smsList = await readRecentSms(50);
     const smsNew: ImportedMessage[] = smsList
@@ -836,7 +838,7 @@ const refreshImportedMessages = async () => {
         sourceKey: sms.address || "",
         rawText: sms.body || "",
       }))
-      .filter((m) => !existingIds.has(m.id));
+      .filter((m) => !existingSmsIds.has(m.id));
 
     let kakaoNew: ImportedMessage[] = [];
     try {
@@ -851,7 +853,7 @@ const refreshImportedMessages = async () => {
             sourceKey: k.sender || "",
             rawText: k.body || "",
           }))
-          .filter((m) => !existingIds.has(m.id));
+          .filter((m) => !existingKakaoTexts.has(m.rawText));
       }
     } catch {}
 
@@ -1251,9 +1253,14 @@ console.log("MATCH_DEBUG", {
                 alert("저장된 카카오 알림 없음.\n알림이 도착하면 자동 저장됩니다.");
                 return;
               }
-              const preview = list.slice(0, 5).map((m: any, i: number) =>
-                `[${i + 1}] sender: "${m.sender}"\nbody: "${m.body?.slice(0, 60)}"`
-              ).join("\n\n");
+              const preview = list.slice(0, 5).map((m: any, i: number) => {
+                const combinedText = `${m.body || ""} ${m.sender || ""}`.toLowerCase();
+                const matchedAccount = accounts.find((a: any) => {
+                  const aliases: string[] = a.aliases?.length ? a.aliases : a.sourceKey ? [a.sourceKey] : [];
+                  return aliases.some((alias: string) => combinedText.includes(alias.toLowerCase()));
+                });
+                return `[${i + 1}] sender: "${m.sender}"\nbody: "${m.body?.slice(0, 50)}"\n→ 매칭계좌: ${matchedAccount ? matchedAccount.name : "없음"}`;
+              }).join("\n\n");
               alert(`저장된 카카오 알림 (최근 ${Math.min(5, list.length)}개):\n\n${preview}`);
             } catch (e) {
               alert("읽기 실패: " + e);
