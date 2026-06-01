@@ -57,6 +57,13 @@ export async function readRecentKakao(limit = 50): Promise<KakaoMessage[]> {
   }
 }
 
+export async function setKnownSenders(senders: string[]): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    await (KakaoReader as any).setKnownSenders({ senders });
+  } catch {}
+}
+
 export async function clearKakaoNotifications(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
   try {

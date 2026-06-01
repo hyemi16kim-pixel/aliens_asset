@@ -73,6 +73,23 @@ public class KakaoReaderPlugin extends Plugin {
         }
     }
 
+    /** Save known sender aliases so the listener can use them for filtering. */
+    @PluginMethod
+    public void setKnownSenders(PluginCall call) {
+        try {
+            com.getcapacitor.JSArray arr = call.getArray("senders");
+            String json = arr != null ? arr.toString() : "[]";
+            getContext()
+                .getSharedPreferences("kakao_known_senders", android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putString("senders_json", json)
+                .apply();
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("setKnownSenders failed: " + e.getMessage());
+        }
+    }
+
     /** Clear all stored notifications (called after user imports them). */
     @PluginMethod
     public void clearNotifications(PluginCall call) {

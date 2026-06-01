@@ -10,6 +10,7 @@ import {
   isKakaoPermissionGranted,
   requestKakaoPermission,
   clearKakaoNotifications,
+  setKnownSenders,
 } from "@/components/lib/kakaoReader";
 import { getCurrentFamilyId, getCurrentUserId } from "@/components/lib/familyCode";
 import { cacheProfileSettings, getProfileSettings } from "@/components/lib/profileSettings";
@@ -424,6 +425,13 @@ const parseImportedMessage = (item: ImportedMessage) => {
       .then((data) => {
         const accountList = Array.isArray(data) ? data : data.accounts || [];
         setAccounts(accountList);
+        // 등록된 별칭 목록을 Android에 전달 (카카오 알림 필터링용)
+        const allSenders = Array.from(new Set(
+          accountList.flatMap((a: any) =>
+            a.aliases?.length ? a.aliases : a.sourceKey ? [a.sourceKey] : []
+          )
+        )).filter(Boolean) as string[];
+        setKnownSenders(allSenders).catch(() => {});
       })
       .catch(console.error);
   }, []);
@@ -1198,69 +1206,6 @@ console.log("MATCH_DEBUG", {
           }}
         >
           💬 카카오 권한
-        </button>
-        <button
-          type="button"
-          onClick={async () => {
-            if (!(window as any).Capacitor?.isNativePlatform?.()) {
-              alert("Android 앱에서만 동작합니다.");
-              return;
-            }
-            try {
-              const list = await readRecentKakao(20);
-              if (!list || list.length === 0) {
-                alert("저장된 카카오 알림 없음.\n알림이 도착하면 자동 저장됩니다.");
-                return;
-              }
-              const preview = list.slice(0, 5).map((m: any, i: number) => {
-                const combinedText = `${m.body || ""} ${m.sender || ""}`.toLowerCase();
-                const matchedAccount = accounts.find((a: any) => {
-                  const aliases: string[] = a.aliases?.length ? a.aliases : a.sourceKey ? [a.sourceKey] : [];
-                  return aliases.some((alias: string) => combinedText.includes(alias.toLowerCase()));
-                });
-                const inList = importedMessages.some((im) => im.rawText === (m.body || ""));
-                return `[${i + 1}] sender: "${m.sender}"\nbody: "${m.body?.slice(0, 40)}"\n→ 매칭: ${matchedAccount ? matchedAccount.name : "없음"} | 목록포함: ${inList ? "✅" : "❌"}`;
-              }).join("\n\n");
-              alert(`저장된 카카오 알림 (최근 ${Math.min(5, list.length)}개):\n\n${preview}`);
-            } catch (e) {
-              alert("읽기 실패: " + e);
-            }
-          }}
-          style={{
-            border: "1px solid #B0A0FF",
-            background: "#F0EDFF",
-            color: "#5A40CC",
-            borderRadius: 999,
-            height: 22,
-            padding: "0 8px",
-            fontSize: 10,
-            fontWeight: 900,
-            cursor: "pointer",
-          }}
-        >
-          🔍 카카오 원시
-        </button>
-        <button
-          type="button"
-          onClick={async () => {
-            if (!(window as any).Capacitor?.isNativePlatform?.()) return;
-            if (!confirm("저장된 카카오 알림을 모두 지웁니다.\n이후엔 금융 키워드 있는 것만 새로 쌓여요.")) return;
-            await clearKakaoNotifications();
-            alert("완료! 이제 카드/은행 알림만 저장돼요.");
-          }}
-          style={{
-            border: "1px solid #FCA5A5",
-            background: "#FEF2F2",
-            color: "#DC2626",
-            borderRadius: 999,
-            height: 22,
-            padding: "0 8px",
-            fontSize: 10,
-            fontWeight: 900,
-            cursor: "pointer",
-          }}
-        >
-          🗑️ 캐시 정리
         </button>
       </div>
     </div>

@@ -66,14 +66,35 @@ public class KakaoNotificationListenerService extends NotificationListenerServic
         // title/text 모두 비어있으면 skip
         if (title.isEmpty() && text.isEmpty()) return;
 
-        // 금융 키워드가 없는 메시지는 저장하지 않음 (친구 채팅 등 불필요한 메시지 제거)
+        // 금융 키워드 OR 등록된 별칭 sender 에 해당하는 것만 저장
         String combined = (title + " " + text).toLowerCase();
         boolean isFinancial = combined.contains("원") || combined.contains("승인") ||
             combined.contains("결제") || combined.contains("입금") ||
             combined.contains("출금") || combined.contains("이체") ||
             combined.contains("잔액") || combined.contains("누적") ||
             combined.contains("납부") || combined.contains("청구");
-        if (!isFinancial) return;
+
+        if (!isFinancial) {
+            // 등록된 별칭 sender인지 확인
+            try {
+                android.content.SharedPreferences sp =
+                    getSharedPreferences("kakao_known_senders", MODE_PRIVATE);
+                String sendersJson = sp.getString("senders_json", "[]");
+                org.json.JSONArray senders = new org.json.JSONArray(sendersJson);
+                String titleLower = title.toLowerCase();
+                boolean matchesSender = false;
+                for (int i = 0; i < senders.length(); i++) {
+                    String s = senders.getString(i).toLowerCase();
+                    if (!s.isEmpty() && (titleLower.contains(s) || s.contains(titleLower))) {
+                        matchesSender = true;
+                        break;
+                    }
+                }
+                if (!matchesSender) return;
+            } catch (Exception e) {
+                return; // 파싱 실패 시 skip
+            }
+        }
 
         String id = sbn.getKey();
         long   ts = sbn.getPostTime();
