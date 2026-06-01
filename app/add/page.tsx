@@ -9,6 +9,7 @@ import {
   readRecentKakao,
   isKakaoPermissionGranted,
   requestKakaoPermission,
+  clearKakaoNotifications,
 } from "@/components/lib/kakaoReader";
 import { getCurrentFamilyId, getCurrentUserId } from "@/components/lib/familyCode";
 import { cacheProfileSettings, getProfileSettings } from "@/components/lib/profileSettings";
@@ -1238,6 +1239,28 @@ console.log("MATCH_DEBUG", {
           }}
         >
           🔍 카카오 원시
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            if (!(window as any).Capacitor?.isNativePlatform?.()) return;
+            if (!confirm("저장된 카카오 알림을 모두 지웁니다.\n이후엔 금융 키워드 있는 것만 새로 쌓여요.")) return;
+            await clearKakaoNotifications();
+            alert("완료! 이제 카드/은행 알림만 저장돼요.");
+          }}
+          style={{
+            border: "1px solid #FCA5A5",
+            background: "#FEF2F2",
+            color: "#DC2626",
+            borderRadius: 999,
+            height: 22,
+            padding: "0 8px",
+            fontSize: 10,
+            fontWeight: 900,
+            cursor: "pointer",
+          }}
+        >
+          🗑️ 캐시 정리
         </button>
       </div>
     </div>
