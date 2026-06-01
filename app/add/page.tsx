@@ -1146,9 +1146,9 @@ console.log("MATCH_DEBUG", {
       </header>
 {inputMode === "IMPORT" && (
   <section style={importBoxStyle}>
-    <div style={importHeaderStyle}>
+    <div style={{ ...importHeaderStyle, flexWrap: "wrap", gap: 6 }}>
       <strong>불러온 내역</strong>
-      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
         <span style={{ fontSize: 10, color: theme.colors.subtext }}>SMS + 카카오</span>
         <button
           type="button"
