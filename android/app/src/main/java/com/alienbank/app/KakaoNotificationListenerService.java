@@ -22,7 +22,7 @@ public class KakaoNotificationListenerService extends NotificationListenerServic
     static final String PREFS_NAME   = "kakao_notifications";
     static final String PREFS_KEY    = "notifications_json";
     static final String PREFS_SEEN   = "seen_ids";
-    static final int    MAX_STORE    = 100;
+    static final int    MAX_STORE    = 200;
 
     private static final String KAKAO_PKG = "com.kakao.talk";
     private static final String TAG       = "KakaoListener";
@@ -65,6 +65,15 @@ public class KakaoNotificationListenerService extends NotificationListenerServic
 
         // title/text 모두 비어있으면 skip
         if (title.isEmpty() && text.isEmpty()) return;
+
+        // 금융 키워드가 없는 메시지는 저장하지 않음 (친구 채팅 등 불필요한 메시지 제거)
+        String combined = (title + " " + text).toLowerCase();
+        boolean isFinancial = combined.contains("원") || combined.contains("승인") ||
+            combined.contains("결제") || combined.contains("입금") ||
+            combined.contains("출금") || combined.contains("이체") ||
+            combined.contains("잔액") || combined.contains("누적") ||
+            combined.contains("납부") || combined.contains("청구");
+        if (!isFinancial) return;
 
         String id = sbn.getKey();
         long   ts = sbn.getPostTime();

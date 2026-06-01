@@ -796,7 +796,7 @@ const loadImportedMessages = async () => {
     try {
       const granted = await isKakaoPermissionGranted();
       if (granted) {
-        const kakaoList = await readRecentKakao(50);
+        const kakaoList = await readRecentKakao(200);
         kakaoMessages = kakaoList.map((k) => ({
           receivedAt: new Date(k.date).toISOString(),
           id: `kakao-${k.id}`,
