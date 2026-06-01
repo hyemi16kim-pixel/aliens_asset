@@ -280,7 +280,11 @@ function TransactionsContent() {
 
   useEffect(() => {
     const accountId = searchParams.get("accountId");
-    if (accountId) { setSelectedAccountId(accountId); setViewMode("LIST"); }
+    if (accountId) {
+      setSelectedAccountId(accountId);
+      setViewMode("LIST");
+      setDayRange(30); // 계좌 필터 진입 시 30일치 표시
+    }
     const view = searchParams.get("view");
     if (view === "all") { setViewMode("LIST"); setFilterType("ALL"); }
   }, [searchParams]);
