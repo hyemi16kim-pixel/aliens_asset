@@ -40,37 +40,26 @@ export async function GET(req: NextRequest) {
           nextEnd = new Date(year, month + 2, 0, 23, 59, 59);
         }
 
-        const [thisTxs, nextTxs, thisPaidTxs, nextPaidTxs, thisPrepaid, nextPrepaid] = await Promise.all([
+        const [thisTxs, nextTxs, thisPaidTxs, nextPaidTxs] = await Promise.all([
           prisma.transaction.findMany({
             where: { familyId, type: "EXPENSE", fromAccountId: account.id, transactionAt: { gte: thisStart, lte: thisEnd } },
           }),
           prisma.transaction.findMany({
             where: { familyId, type: "EXPENSE", fromAccountId: account.id, transactionAt: { gte: nextStart, lte: nextEnd } },
           }),
-          // 날짜 범위 기반 일반 이체 납부
+          // 해당 사이클 기간 내 납부 이체 (선결제 카테고리 제외 - 다른 사이클 납부분 오염 방지)
           prisma.transaction.findMany({
-            where: { familyId, type: "TRANSFER", toAccountId: account.id, transactionAt: { gte: thisStart, lte: thisEnd } },
+            where: { familyId, type: "TRANSFER", toAccountId: account.id, transactionAt: { gte: thisStart, lte: thisEnd }, NOT: { category: { in: ["카드 전월 선결제", "카드 이번달 선결제"] } } },
           }),
           prisma.transaction.findMany({
-            where: { familyId, type: "TRANSFER", toAccountId: account.id, transactionAt: { gte: nextStart, lte: nextEnd } },
-          }),
-          // 카테고리 기반 선결제 (날짜 무관하게 해당 사이클에 차감)
-          prisma.transaction.findMany({
-            where: { familyId, type: "TRANSFER", toAccountId: account.id, category: "카드 전월 선결제" },
-          }),
-          prisma.transaction.findMany({
-            where: { familyId, type: "TRANSFER", toAccountId: account.id, category: "카드 이번달 선결제" },
+            where: { familyId, type: "TRANSFER", toAccountId: account.id, transactionAt: { gte: nextStart, lte: nextEnd }, NOT: { category: { in: ["카드 전월 선결제", "카드 이번달 선결제"] } } },
           }),
         ]);
 
         const thisExpense = thisTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
         const nextExpense = nextTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
-        const thisPaid =
-          thisPaidTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0) +
-          thisPrepaid.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
-        const nextPaid =
-          nextPaidTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0) +
-          nextPrepaid.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
+        const thisPaid = thisPaidTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
+        const nextPaid = nextPaidTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
 
         return {
           ...account,
