@@ -313,22 +313,16 @@ function TransactionsContent() {
   const monthLabel = `${month.getFullYear()}년 ${month.getMonth() + 1}월`;
   const monthRangeLabel = formatMonthRangeLabel(monthRange.start, monthRange.end);
 
-  // 오늘 기준 dayRange 계산 — 월 이동 시 같은 날짜를 해당 월에 적용
+  // 항상 오늘 실제 날짜 기준으로 dayRange 계산
   const dayRangeAnchor = useMemo(() => {
     const today = new Date();
-    const todayMonth = today.getFullYear() * 12 + today.getMonth();
-    const selMonth = month.getFullYear() * 12 + month.getMonth();
-    const monthsDiff = todayMonth - selMonth; // 몇 달 전인지
-    // 해당 월의 "오늘과 같은 날짜" (말일 초과 시 말일로 클램프)
-    const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-    const anchorDay = Math.min(today.getDate(), lastDay);
-    const end = new Date(month.getFullYear(), month.getMonth(), anchorDay, 23, 59, 59, 999);
+    const end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
     const start = new Date(end);
     start.setDate(start.getDate() - dayRange + 1);
     start.setHours(0, 0, 0, 0);
     const fmt = (d: Date) => `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
     return { start, end, label: `${fmt(start)}~${fmt(end)}` };
-  }, [month, dayRange]);
+  }, [dayRange]);
   const hasActiveFilter = !!selectedType || !!selectedAccountId;
 
   const filteredTransactions = useMemo(() => {
