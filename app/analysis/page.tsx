@@ -246,6 +246,7 @@ function AnalysisPageContent() {
   const [trendMoneyType, setTrendMoneyType] = useState<"EXPENSE" | "INCOME">("EXPENSE");
   const [selectedTrendCategory, setSelectedTrendCategory] = useState<string | null>(null);
   const [includeDebt, setIncludeDebt] = useState(true);
+  const [showBudgetInTrend, setShowBudgetInTrend] = useState(false);
   const [budgets, setBudgets] = useState<Record<string, number>>({});
     
   const [monthStartDay, setMonthStartDay] = useState(1);
@@ -962,7 +963,22 @@ const lastMonthExpenses = expenses.filter((tx) =>
 
   <div style={spendingHeaderStyle}>
     <strong style={{ fontSize: 14 }}>소비 비중</strong>
-    <span style={smallSubTextStyle}>지출 카테고리별</span>
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <span style={smallSubTextStyle}>지출 카테고리별</span>
+      <button
+        type="button"
+        onClick={() => setShowBudgetInTrend(v => !v)}
+        style={{
+          fontSize: 10, fontWeight: 800, cursor: "pointer",
+          border: `1.5px solid ${showBudgetInTrend ? theme.colors.primary : "#E8E1F5"}`,
+          background: showBudgetInTrend ? `${theme.colors.primary}18` : "#FAFAFF",
+          color: showBudgetInTrend ? theme.colors.primary : "#A59DBD",
+          borderRadius: 999, padding: "3px 8px",
+        }}
+      >
+        예산 대비 {showBudgetInTrend ? "ON" : "OFF"}
+      </button>
+    </div>
   </div>
   {trendCategories.length === 0 ? (
     <p style={emptyTrendTextStyle}>해당 월 지출 데이터가 없습니다.</p>
@@ -1022,9 +1038,16 @@ const lastMonthExpenses = expenses.filter((tx) =>
               }}
             />
             <span style={{ flex: 1, fontWeight: 800 }}>{item.name}</span>
-            <span style={{ fontSize: 11, color: "#9b8ec4", marginRight: 6 }}>
-              {item.amount.toLocaleString()}원
-            </span>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", marginRight: 6 }}>
+              {showBudgetInTrend && (budgets[item.name] > 0) && (
+                <span style={{ fontSize: 10, color: "#B0A8C8", fontWeight: 600 }}>
+                  예산 {Number(budgets[item.name]).toLocaleString()}원
+                </span>
+              )}
+              <span style={{ fontSize: 11, color: "#9b8ec4", fontWeight: 700 }}>
+                {item.amount.toLocaleString()}원
+              </span>
+            </div>
             <strong style={{ fontSize: 13, minWidth: 32, textAlign: "right" }}>
               {item.percent}%
             </strong>
