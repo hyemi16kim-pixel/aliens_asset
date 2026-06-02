@@ -745,7 +745,7 @@ const getPercent = (owner: string) => {
           const heightB = Math.max(flameBaseH + incRatioB * flameMaxH, flameBaseH + 4);
           const widthA  = flameBaseW + expRatioA * flameMaxW;
           const widthB  = flameBaseW + expRatioB * flameMaxW;
-          const flameContainerW = widthA + widthB - 4;
+          const flameContainerW = Math.max(widthA, widthB) + 4; // 두 불꽃이 충분히 겹치도록
 
           // ── 루프 마일스톤 (천만 단위 × 10개) ──
           const STEP  = 10_000_000;
@@ -897,7 +897,7 @@ const getPercent = (owner: string) => {
                     transition: "all 1s ease",
                   }}>
                     <div style={{
-                      position: "absolute", bottom: 0, left: 0,
+                      position: "absolute", top: 0, left: 0,
                       width: widthA, height: heightA,
                       background: `linear-gradient(180deg, ${colorA}, ${colorA}99 55%, transparent)`,
                       borderRadius: "50% 20% 55% 60%",
@@ -906,7 +906,7 @@ const getPercent = (owner: string) => {
                       opacity: 0.93, transition: "all 1s ease",
                     }} />
                     <div style={{
-                      position: "absolute", bottom: 0, right: 0,
+                      position: "absolute", top: 0, right: 0,
                       width: widthB, height: heightB,
                       background: `linear-gradient(180deg, ${colorB}, ${colorB}99 55%, transparent)`,
                       borderRadius: "20% 50% 60% 55%",
@@ -982,8 +982,8 @@ const getPercent = (owner: string) => {
                 ].map((u) => (
                   <div key={u.name} style={{ background: "#F4F0FF", borderRadius: 12, padding: "10px 12px" }}>
                     <div style={{ fontSize: 11, fontWeight: 800, color: "#7C5CFF", marginBottom: 6 }}>{u.name}</div>
-                    <div style={{ fontSize: 11, color: "#8B7BAB", marginBottom: 2 }}>🚀 수입 {Math.round(u.incRatio * 100)}%</div>
-                    <div style={{ fontSize: 11, color: "#8B7BAB" }}>🔥 지출 {Math.round(u.expRatio * 100)}%</div>
+                    <div style={{ fontSize: 11, color: "#8B7BAB", marginBottom: 2 }}>🚀 이번달 수입 {Math.round(u.incRatio * 100)}%</div>
+                    <div style={{ fontSize: 11, color: "#8B7BAB" }}>🔥 이번달 지출 {Math.round(u.expRatio * 100)}%</div>
                   </div>
                 ))}
               </div>
