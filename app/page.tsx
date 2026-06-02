@@ -204,9 +204,7 @@ export default function HomePage() {
       {/* ── 스크롤 콘텐츠 ── */}
       <main {...swipe} style={{ minHeight: "100vh", background: "#F7F5FF", padding: "calc(env(safe-area-inset-top) + 58px) 10px 0", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 10 }}>
         <HeroSlider data={dashboard} goals={goals} />
-        <div style={{ minHeight: 200 }}>
-          <RecentTransactions items={dashboard?.recentTransactions || []} />
-        </div>
+        <RecentTransactions items={dashboard?.recentTransactions || []} />
         <BottomNav />
         <div style={{ height: "calc(76px + env(safe-area-inset-bottom))", flexShrink: 0 }} />
       </main>

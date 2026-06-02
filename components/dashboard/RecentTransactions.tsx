@@ -115,10 +115,7 @@ const getIcon = (tx: Transaction) => {
         padding: "20px",
         border: `1px solid ${theme.colors.border}`,
         boxShadow: theme.shadow.sm,
-        height: "100%",
         boxSizing: "border-box",
-        display: "flex",
-        flexDirection: "column",
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
@@ -140,7 +137,7 @@ const getIcon = (tx: Transaction) => {
           <div style={{ fontSize: 13, fontWeight: 700 }}>아직 거래가 없습니다</div>
         </div>
 ) : (
-  <div style={scrollListStyle}>
+  <div>
 {items
   .slice()
   .sort((a, b) => b.id - a.id)
