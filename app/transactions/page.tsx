@@ -286,7 +286,13 @@ function TransactionsContent() {
       setDayRange(30); // 계좌 필터 진입 시 30일치 표시
     }
     const view = searchParams.get("view");
-    if (view === "all") { setViewMode("LIST"); setFilterType("ALL"); }
+    if (view === "all") {
+      setViewMode("LIST");
+      setFilterType("ALL");
+      // 오늘 기준으로 월 리셋 (이전에 다른 달 탐색 시 날짜 앵커가 오늘이 되도록)
+      const savedStartDay = Number(localStorage.getItem("alien_month_start_day") || 1);
+      setMonth(getBaseMonthByStartDay(new Date(), savedStartDay));
+    }
   }, [searchParams]);
 
   useEffect(() => {
