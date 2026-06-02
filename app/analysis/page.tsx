@@ -813,50 +813,40 @@ const getPercent = (owner: string) => {
                   animation: "rocketFloat 2.2s ease-in-out infinite",
                 }}>
                   <div style={{ fontSize: 26 }}>🚀</div>
-                  {/* 2색 불꽃: 좌(userA) 보라 / 우(userB) 핑크 */}
+                  {/* 2색 불꽃: 겹치도록 position absolute */}
                   <div style={{
+                    position: "relative",
                     margin: "2px auto 0",
-                    display: "flex", alignItems: "flex-end",
-                    width: 22, transition: "all 1s ease",
+                    width: 26,
+                    height: flameBaseH + flameMaxAdd,
+                    transition: "all 1s ease",
                   }}>
-                    {/* 좌 불꽃 — userA (프로필 색상) */}
+                    {/* userA 불꽃 — 왼쪽으로 살짝 치우침 */}
                     <div style={{
-                      flex: Math.max(expRatioA, 0.15),
-                      height: flameBaseH + expRatioA * flameMaxAdd,
-                      background: `linear-gradient(180deg,${colorA}ee,${colorA} 45%,${colorA}aa)`,
-                      borderRadius: "50% 20% 50% 60%",
+                      position: "absolute", bottom: 0, left: 0,
+                      width: "72%",
+                      height: Math.max(flameBaseH + expRatioA * flameMaxAdd, flameBaseH + 4),
+                      background: `linear-gradient(180deg, ${colorA}, ${colorA}bb 50%, ${colorA}66)`,
+                      borderRadius: "50% 20% 55% 60%",
                       animation: "flameFlicker 0.15s ease-in-out infinite",
-                      filter: "blur(1.5px)", opacity: 0.95,
+                      filter: "blur(2px) saturate(3) brightness(0.9)",
+                      opacity: 0.92,
                       transition: "all 1s ease",
-                      boxShadow: `0 0 8px ${colorA}88`,
                     }} />
-                    {/* 우 불꽃 — userB (프로필 색상) */}
+                    {/* userB 불꽃 — 오른쪽으로 살짝 치우침, 중앙에서 겹침 */}
                     <div style={{
-                      flex: Math.max(expRatioB, 0.15),
-                      height: flameBaseH + expRatioB * flameMaxAdd,
-                      background: `linear-gradient(180deg,${colorB}ee,${colorB} 45%,${colorB}aa)`,
-                      borderRadius: "20% 50% 60% 50%",
+                      position: "absolute", bottom: 0, right: 0,
+                      width: "72%",
+                      height: Math.max(flameBaseH + expRatioB * flameMaxAdd, flameBaseH + 4),
+                      background: `linear-gradient(180deg, ${colorB}, ${colorB}bb 50%, ${colorB}66)`,
+                      borderRadius: "20% 50% 60% 55%",
                       animation: "flameFlicker 0.15s ease-in-out infinite",
                       animationDelay: "0.08s",
-                      filter: "blur(1.5px)", opacity: 0.95,
+                      filter: "blur(2px) saturate(3) brightness(0.9)",
+                      opacity: 0.92,
                       transition: "all 1s ease",
-                      boxShadow: `0 0 8px ${colorB}88`,
                     }} />
                   </div>
-                </div>
-                {/* 이름 라벨 (로켓 아래) */}
-                <div style={{
-                  position: "absolute", left: "50%",
-                  bottom: rocketBottom - 20,
-                  transform: "translateX(-50%)",
-                  transition: "bottom 1.4s cubic-bezier(0.34,1.56,0.64,1)",
-                  display: "flex", gap: 4, alignItems: "center",
-                  fontSize: 8.5, fontWeight: 900, zIndex: 6,
-                  textShadow: "0 1px 4px rgba(0,0,0,0.7)", whiteSpace: "nowrap",
-                }}>
-                  <span style={{ color: "#D4BCFF" }}>{userA}</span>
-                  <span style={{ color: "rgba(255,255,255,0.4)" }}>💜</span>
-                  <span style={{ color: "#FFD0EE" }}>{userB}</span>
                 </div>
 
                 {/* 지구 (출발점 — 하단 중앙, 명확히 보임) */}
