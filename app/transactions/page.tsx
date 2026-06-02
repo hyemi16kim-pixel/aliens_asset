@@ -631,19 +631,26 @@ function TransactionsContent() {
                     </button>
                   );
                 })}
-                {/* 달력 아이콘 버튼 */}
-                <button
-                  onClick={() => { setShowDatePicker(true); setPickerMonth(new Date()); setPickerDragStart(null); setPickerDragEnd(null); }}
-                  style={{
-                    height: 28, width: 28, borderRadius: 999,
-                    display: "grid", placeItems: "center", cursor: "pointer",
-                    border: customRange ? `1.5px solid ${activeColor}` : "1.5px solid #E8E1F5",
-                    background: customRange ? `${activeColor}18` : "#FAFAFF",
-                    color: customRange ? activeColor : "#A59DBD",
-                  }}
-                >
-                  <CalendarDays size={14} />
-                </button>
+                {/* 달력 아이콘 버튼 + 선택된 날짜 라벨 */}
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <button
+                    onClick={() => { setShowDatePicker(true); setPickerMonth(new Date()); setPickerDragStart(null); setPickerDragEnd(null); }}
+                    style={{
+                      height: 28, width: 28, borderRadius: 999,
+                      display: "grid", placeItems: "center", cursor: "pointer",
+                      border: customRange ? `1.5px solid ${activeColor}` : "1.5px solid #E8E1F5",
+                      background: customRange ? `${activeColor}18` : "#FAFAFF",
+                      color: customRange ? activeColor : "#A59DBD",
+                    }}
+                  >
+                    <CalendarDays size={14} />
+                  </button>
+                  {customRange && (
+                    <span style={{ fontSize: 11, fontWeight: 800, color: activeColor }}>
+                      {`${customRange.start.getMonth()+1}/${customRange.start.getDate()}~${customRange.end.getMonth()+1}/${customRange.end.getDate()}`}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
 
@@ -654,8 +661,11 @@ function TransactionsContent() {
                 onClick={() => setShowDatePicker(false)}
               >
                 <div
-                  style={{ background: "#fff", borderRadius: "24px 24px 0 0", padding: "20px 16px 32px", width: "100%", maxWidth: 390 }}
+                  style={{ background: "#fff", borderRadius: "24px 24px 0 0", padding: `20px 16px calc(env(safe-area-inset-bottom) + 80px)`, width: "100%", maxWidth: 390 }}
                   onClick={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onTouchMove={(e) => e.stopPropagation()}
+                  onTouchEnd={(e) => e.stopPropagation()}
                 >
                   {/* 헤더 */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -692,13 +702,15 @@ function TransactionsContent() {
                       ? d >= rangeStart && d <= rangeEnd : false;
                     return (
                       <div
-                        style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "3px 0", userSelect: "none" }}
-                        onTouchStart={(e) => { const d = getDateFromTouch(e); if (d) { setPickerDragStart(d); setPickerDragEnd(d); } }}
-                        onTouchMove={(e) => { const d = getDateFromTouch(e); if (d && pickerDragStart) setPickerDragEnd(d); }}
-                        onTouchEnd={() => {
+                        style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "3px 0", userSelect: "none", touchAction: "none" }}
+                        onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); const d = getDateFromTouch(e); if (d) { setPickerDragStart(d); setPickerDragEnd(d); } }}
+                        onTouchMove={(e) => { e.stopPropagation(); e.preventDefault(); const d = getDateFromTouch(e); if (d && pickerDragStart) setPickerDragEnd(d); }}
+                        onTouchEnd={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
                           if (pickerDragStart && pickerDragEnd) {
-                            const s = pickerDragStart <= pickerDragEnd ? pickerDragStart : pickerDragEnd;
-                            const en = pickerDragStart <= pickerDragEnd ? pickerDragEnd : pickerDragStart;
+                            const s = new Date(pickerDragStart <= pickerDragEnd ? pickerDragStart : pickerDragEnd);
+                            const en = new Date(pickerDragStart <= pickerDragEnd ? pickerDragEnd : pickerDragStart);
                             s.setHours(0, 0, 0, 0);
                             en.setHours(23, 59, 59, 999);
                             setCustomRange({ start: s, end: en });
