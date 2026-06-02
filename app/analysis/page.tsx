@@ -510,7 +510,20 @@ const getPercent = (owner: string) => {
     <>
       <section style={cardStyle}>
         <div style={spendingHeaderStyle}>
-          <strong style={{ fontSize: 14 }}>예산 대비 사용률</strong>
+          <div>
+            <strong style={{ fontSize: 14 }}>예산 대비 사용률</strong>
+            {(() => {
+              const totalBudget = topCategories.reduce((s, c) => s + c.budget, 0);
+              const totalUsed = topCategories.reduce((s, c) => s + c.amount, 0);
+              if (totalBudget === 0) return null;
+              return (
+                <div style={{ fontSize: 11, color: theme.colors.subtext, marginTop: 2 }}>
+                  <span style={{ color: theme.colors.primary, fontWeight: 700 }}>{totalUsed.toLocaleString()}원</span>
+                  {" / "}{totalBudget.toLocaleString()}원
+                </div>
+              );
+            })()}
+          </div>
           <span style={smallSubTextStyle}>
             {formatMonthRangeLabel(currentRange.start, currentRange.end)}
           </span>
