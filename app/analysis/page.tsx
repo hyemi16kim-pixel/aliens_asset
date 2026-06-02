@@ -1039,9 +1039,11 @@ const lastMonthExpenses = expenses.filter((tx) =>
             />
             <span style={{ flex: 1, fontWeight: 800 }}>{item.name}</span>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", marginRight: 6 }}>
-              {showBudgetInTrend && (budgets[item.name] > 0) && (
-                <span style={{ fontSize: 10, color: "#B0A8C8", fontWeight: 600 }}>
-                  예산 {Number(budgets[item.name]).toLocaleString()}원
+              {showBudgetInTrend && (
+                <span style={{ fontSize: 10, fontWeight: 600, color: budgets[item.name] > 0 ? (item.amount > budgets[item.name] ? "#FF3B70" : "#B0A8C8") : "#B0A8C8" }}>
+                  {budgets[item.name] > 0
+                    ? `예산 ${Number(budgets[item.name]).toLocaleString()}원 (${Math.round((item.amount / budgets[item.name]) * 100)}%)`
+                    : "예산 미설정"}
                 </span>
               )}
               <span style={{ fontSize: 11, color: "#9b8ec4", fontWeight: 700 }}>
