@@ -776,13 +776,18 @@ function TransactionsContent() {
           {viewMode === "LIST" && (
             <div>
               {expenseCategoriesInView.length > 0 && (
-                <div style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  overflowX: "auto", paddingBottom: 4,
-                  WebkitOverflowScrolling: "touch",
-                  scrollbarWidth: "none",
-                  msOverflowStyle: "none",
-                } as React.CSSProperties}>
+                <div
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6,
+                    overflowX: "auto", paddingBottom: 4,
+                    WebkitOverflowScrolling: "touch",
+                    scrollbarWidth: "none",
+                    msOverflowStyle: "none",
+                  } as React.CSSProperties}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onTouchMove={(e) => e.stopPropagation()}
+                  onTouchEnd={(e) => e.stopPropagation()}
+                >
                   <SlidersHorizontal size={14} color="#A59DBD" style={{ flexShrink: 0 }} />
                   {["전체", ...expenseCategoriesInView].map((cat) => {
                     const active = categoryFilter === cat;
