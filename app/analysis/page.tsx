@@ -717,7 +717,7 @@ const getPercent = (owner: string) => {
           return (
             <>
               {/* 우주 배경 */}
-              <div style={{ position: "relative", height: 200, background: "linear-gradient(180deg,#08061A 0%,#130F30 60%,#1E1545 100%)", borderRadius: 16, overflow: "hidden", marginBottom: 10 }}>
+              <div style={{ position: "relative", height: 200, background: "linear-gradient(180deg,#08061A 0%,#130F30 60%,#1E1545 100%)", borderRadius: 16, overflow: "hidden", marginTop: 20, marginBottom: 10 }}>
                 {/* 별 */}
                 {[...Array(14)].map((_, i) => (
                   <div key={i} style={{
