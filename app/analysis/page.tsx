@@ -687,6 +687,8 @@ const getPercent = (owner: string) => {
           @keyframes rocketFloat { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(-5px)} }
           @keyframes flameFlicker { 0%,100%{transform:scaleX(1) scaleY(1)} 30%{transform:scaleX(1.15) scaleY(0.9)} 60%{transform:scaleX(0.85) scaleY(1.1)} }
           @keyframes starTwinkle { 0%,100%{opacity:0.2} 50%{opacity:0.9} }
+          @keyframes planetFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+          @keyframes planetSpin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
         `}</style>
         <div style={spendingHeaderStyle}>
           <strong style={{ fontSize: 14 }}>커플 로켓 🚀</strong>
@@ -717,7 +719,7 @@ const getPercent = (owner: string) => {
           return (
             <>
               {/* 우주 배경 */}
-              <div style={{ position: "relative", height: 200, background: "linear-gradient(180deg,#08061A 0%,#130F30 60%,#1E1545 100%)", borderRadius: 16, overflow: "hidden", marginTop: 20, marginBottom: 10 }}>
+              <div style={{ position: "relative", height: 200, background: "linear-gradient(135deg,#2D0A4E 0%,#5B1A6E 30%,#8B2A7A 60%,#C2407A 100%)", borderRadius: 16, overflow: "hidden", marginTop: 20, marginBottom: 10 }}>
                 {/* 별 */}
                 {[...Array(14)].map((_, i) => (
                   <div key={i} style={{
@@ -729,6 +731,41 @@ const getPercent = (owner: string) => {
                     animationDelay: `${(i * 0.25) % 2}s`,
                   }} />
                 ))}
+                {/* 행성 1 - 큰 보라 행성 */}
+                <div style={{
+                  position: "absolute", top: 12, right: 18,
+                  width: 38, height: 38, borderRadius: "50%",
+                  background: "radial-gradient(circle at 35% 35%, #B07FFF, #6B2FCC)",
+                  boxShadow: "0 0 12px rgba(176,127,255,0.5)",
+                  animation: "planetFloat 3.5s ease-in-out infinite",
+                }}>
+                  {/* 고리 */}
+                  <div style={{
+                    position: "absolute", top: "38%", left: "-30%",
+                    width: "160%", height: "22%",
+                    border: "2.5px solid rgba(200,160,255,0.5)",
+                    borderRadius: "50%",
+                    transform: "rotateX(65deg)",
+                  }} />
+                </div>
+                {/* 행성 2 - 작은 분홍 행성 */}
+                <div style={{
+                  position: "absolute", top: 22, left: 14,
+                  width: 22, height: 22, borderRadius: "50%",
+                  background: "radial-gradient(circle at 35% 35%, #FFB3E6, #E0529A)",
+                  boxShadow: "0 0 8px rgba(255,100,180,0.4)",
+                  animation: "planetFloat 4.2s ease-in-out infinite",
+                  animationDelay: "1s",
+                }} />
+                {/* 행성 3 - 중간 민트 행성 */}
+                <div style={{
+                  position: "absolute", top: 8, left: "45%",
+                  width: 16, height: 16, borderRadius: "50%",
+                  background: "radial-gradient(circle at 35% 35%, #A8FFE8, #2EC4A0)",
+                  boxShadow: "0 0 6px rgba(46,196,160,0.4)",
+                  animation: "planetFloat 5s ease-in-out infinite",
+                  animationDelay: "0.5s",
+                }} />
 
                 {/* 로켓 A */}
                 <div style={{
@@ -779,11 +816,26 @@ const getPercent = (owner: string) => {
                 </div>
 
                 {/* 이름 라벨 */}
-                <div style={{ position: "absolute", bottom: 6, left: "28%", transform: "translateX(-50%)", fontSize: 10, color: "#C4B8FF", fontWeight: 800 }}>{userA}</div>
-                <div style={{ position: "absolute", bottom: 6, left: "72%", transform: "translateX(-50%)", fontSize: 10, color: "#C4B8FF", fontWeight: 800 }}>{userB}</div>
+                <div style={{ position: "absolute", bottom: 6, left: "28%", transform: "translateX(-50%)", fontSize: 10, color: "#FFD6F0", fontWeight: 800, zIndex: 2 }}>{userA}</div>
+                <div style={{ position: "absolute", bottom: 6, left: "72%", transform: "translateX(-50%)", fontSize: 10, color: "#FFD6F0", fontWeight: 800, zIndex: 2 }}>{userB}</div>
 
-                {/* 지면 */}
-                <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 22, background: "linear-gradient(180deg,#2A1F55,#1A1340)", borderTop: "1px solid #3D2F70" }} />
+                {/* 지구 */}
+                <div style={{
+                  position: "absolute", bottom: -60, left: "50%",
+                  transform: "translateX(-50%)",
+                  width: 220, height: 220, borderRadius: "50%",
+                  background: "radial-gradient(circle at 40% 35%, #4FC3F7, #1565C0 40%, #0D47A1 70%, #01579B)",
+                  boxShadow: "0 0 20px rgba(79,195,247,0.4), inset -10px -10px 30px rgba(0,0,50,0.4)",
+                  overflow: "hidden",
+                }}>
+                  {/* 대륙 */}
+                  <div style={{ position: "absolute", top: "18%", left: "15%", width: "28%", height: "22%", background: "rgba(76,175,80,0.75)", borderRadius: "40% 60% 50% 70%" }} />
+                  <div style={{ position: "absolute", top: "12%", left: "48%", width: "20%", height: "18%", background: "rgba(76,175,80,0.7)", borderRadius: "60% 40% 70% 30%" }} />
+                  <div style={{ position: "absolute", top: "30%", left: "60%", width: "24%", height: "16%", background: "rgba(76,175,80,0.65)", borderRadius: "50% 50% 40% 60%" }} />
+                  {/* 구름 */}
+                  <div style={{ position: "absolute", top: "8%", left: "20%", width: "35%", height: "8%", background: "rgba(255,255,255,0.35)", borderRadius: 999 }} />
+                  <div style={{ position: "absolute", top: "38%", left: "10%", width: "25%", height: "6%", background: "rgba(255,255,255,0.3)", borderRadius: 999 }} />
+                </div>
               </div>
 
               {/* 스탯 */}
