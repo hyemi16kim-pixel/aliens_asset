@@ -730,30 +730,82 @@ const getPercent = (owner: string) => {
           const colorA = safeColor(isUserAMe ? myColor : partColor);
           const colorB = safeColor(isUserAMe ? partColor : myColor);
 
-          // 좌표계: 컨테이너 300px, 지구 100px (bottom:-18 → 82px 보임)
-          const CONTAINER_H = 300;
-          const ROCKET_MIN = 90;   // 지구 위 시작점
-          const ROCKET_MAX = 258;  // 목표 도달 위치
-          const rocketBottom = ROCKET_MIN + progress * (ROCKET_MAX - ROCKET_MIN);
+          // 좌표계
+          const CONTAINER_H      = 300;
+          const PLANET_FROM_BTM  = 92;  // 지나온 행성 y (지구 바로 위)
+          const PLANET_TO_BTM    = 216; // 다음 목표 행성 y
+          const PLANET_AFTER_BTM = 256; // 그 다음 행성 y
 
-          const flameBaseH = 11;
-          const flameMaxAdd = 24;
+          // 불꽃: 수입 → 세로, 지출 → 가로
+          const flameBaseH = 10;
+          const flameMaxH  = 36;
+          const flameBaseW = 7;
+          const flameMaxW  = 13;
+          const heightA = Math.max(flameBaseH + incRatioA * flameMaxH, flameBaseH + 4);
+          const heightB = Math.max(flameBaseH + incRatioB * flameMaxH, flameBaseH + 4);
+          const widthA  = flameBaseW + expRatioA * flameMaxW;
+          const widthB  = flameBaseW + expRatioB * flameMaxW;
+          const flameContainerW = widthA + widthB - 4;
 
-          // 마일스톤 행성 (좌우 교차 배치 → 궤도 느낌)
-          const milestones = [
-            { amount: 100_000_000,   label: "1억",   planet: "🌙", left: "78%", glow: "rgba(200,200,255,0.9)" },
-            { amount: 300_000_000,   label: "3억",   planet: "🔴", left: "16%", glow: "rgba(255,140,110,0.9)" },
-            { amount: 500_000_000,   label: "5억",   planet: "🪐", left: "80%", glow: "rgba(176,120,255,0.9)" },
-            { amount: 700_000_000,   label: "7억",   planet: "🌍", left: "14%", glow: "rgba(100,210,130,0.9)" },
-            { amount: 1_000_000_000, label: "10억 🎯", planet: "⭐", left: "50%", glow: "rgba(255,228,80,0.95)" },
+          // ── 루프 마일스톤 (천만 단위 × 10개) ──
+          const STEP  = 10_000_000;
+          const COUNT = 10;
+          const LAP   = STEP * COUNT; // 1억
+          const PLANET_EMOJIS = ["🌕","⭐","☄️","🔴","🪐","💫","🌟","🌊","✨","🏆"];
+          const PLANET_GLOWS  = [
+            "rgba(220,220,255,0.9)","rgba(255,240,100,0.9)","rgba(200,180,255,0.9)",
+            "rgba(255,140,110,0.9)","rgba(180,130,255,0.9)","rgba(150,220,255,0.9)",
+            "rgba(255,220,80,0.9)","rgba(100,200,255,0.9)","rgba(200,255,180,0.9)",
+            "rgba(255,210,80,0.95)",
           ];
+          const PLANET_LEFTS = [74, 26, 76, 24, 72, 28, 74, 26, 70, 50];
+
+          const lap             = Math.floor(totalAssets / LAP);
+          const inLap           = totalAssets % LAP;
+          const passedCount     = Math.floor(inLap / STEP);
+          const segmentProgress = (inLap % STEP) / STEP;
+
+          const fromIdx  = passedCount === 0 ? -1 : (passedCount - 1) % COUNT;
+          const toIdx    = passedCount % COUNT;
+          const afterIdx = (passedCount + 1) % COUNT;
+
+          const fromLeft  = passedCount === 0 ? 50 : PLANET_LEFTS[fromIdx];
+          const toLeft    = PLANET_LEFTS[toIdx];
+          const afterLeft = PLANET_LEFTS[afterIdx];
+
+          // 로켓 위치
+          const rocketBottom  = PLANET_FROM_BTM + 10 + segmentProgress * (PLANET_TO_BTM - PLANET_FROM_BTM - 10);
+          const rocketLeftPct = fromLeft + segmentProgress * (toLeft - fromLeft);
+
+          // 금액 포맷 (천만 단위)
+          const fmtM = (n: number) => {
+            const ok  = Math.floor(n / 100_000_000);
+            const man = Math.floor((n % 100_000_000) / 10_000_000);
+            if (ok > 0 && man > 0) return `${ok}억${man}천만`;
+            if (ok > 0) return `${ok}억`;
+            return `${man}천만`;
+          };
+          const fromAmt  = lap * LAP + passedCount * STEP;
+          const toAmt    = lap * LAP + (passedCount + 1) * STEP;
+          const afterAmt = lap * LAP + (passedCount + 2) * STEP;
+
+          // 시간대별 배경
+          const hour = typeof window !== "undefined" ? new Date().getHours() : 20;
+          const bgGradient = (() => {
+            if (hour >= 5  && hour < 8)  return "linear-gradient(180deg,#0D2B55 0%,#1A4A8A 35%,#2A6EC0 65%,#6E9EDC 100%)";
+            if (hour >= 8  && hour < 11) return "linear-gradient(180deg,#0A3D7A 0%,#1565C0 35%,#2196F3 65%,#64B5F6 100%)";
+            if (hour >= 11 && hour < 14) return "linear-gradient(180deg,#0277BD 0%,#029AE5 35%,#40C4FF 65%,#B3E5FC 100%)";
+            if (hour >= 14 && hour < 17) return "linear-gradient(180deg,#3A2060 0%,#B54600 35%,#E87700 65%,#FFB74D 100%)";
+            if (hour >= 17 && hour < 20) return "linear-gradient(180deg,#3A0A2A 0%,#A82020 30%,#E04818 60%,#FF7043 100%)";
+            return "linear-gradient(180deg,#020010 0%,#0D0428 30%,#1A0A3E 60%,#0E2060 100%)";
+          })();
 
           return (
             <>
-              {/* 우주 배경 */}
+              {/* 우주 배경 (시간대별 색상) */}
               <div style={{
                 position: "relative", height: CONTAINER_H,
-                background: "linear-gradient(180deg, #2A1258 0%, #4422A0 32%, #6B35CC 62%, #2244A8 100%)",
+                background: bgGradient,
                 borderRadius: 18, overflow: "hidden", marginTop: 14, marginBottom: 12,
               }}>
 
@@ -771,81 +823,97 @@ const getPercent = (owner: string) => {
                   }} />
                 ))}
 
-                {/* 궤도 점선: 중앙 */}
-                <div style={{
-                  position: "absolute", left: "50%", top: 12,
-                  bottom: ROCKET_MIN + 4, width: 0,
-                  borderLeft: "1.5px dashed rgba(200,170,255,0.28)",
-                  transform: "translateX(-50%)", zIndex: 1,
-                }} />
+                {/* 궤도 SVG: 지나온 → 다음 목표 → 그 다음, 행성 위치와 일치 */}
+                <svg
+                  viewBox={`0 0 100 ${CONTAINER_H}`}
+                  preserveAspectRatio="none"
+                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 1 }}
+                >
+                  <path
+                    d={`M ${fromLeft} ${CONTAINER_H - PLANET_FROM_BTM} Q ${(fromLeft + toLeft) / 2} ${CONTAINER_H - (PLANET_FROM_BTM + PLANET_TO_BTM) / 2} ${toLeft} ${CONTAINER_H - PLANET_TO_BTM} Q ${(toLeft + afterLeft) / 2} ${CONTAINER_H - (PLANET_TO_BTM + PLANET_AFTER_BTM) / 2} ${afterLeft} ${CONTAINER_H - PLANET_AFTER_BTM}`}
+                    stroke="rgba(200,170,255,0.4)"
+                    strokeWidth="1.2"
+                    strokeDasharray="3 4"
+                    fill="none"
+                  />
+                </svg>
 
-                {/* 마일스톤 행성 */}
-                {milestones.map((m) => {
-                  const mProgress = m.amount / GOAL;
-                  const mBottom = ROCKET_MIN + mProgress * (ROCKET_MAX - ROCKET_MIN);
-                  const mTopPx = CONTAINER_H - mBottom - 14;
-                  const reached = totalAssets >= m.amount;
-                  return (
-                    <div key={m.label} style={{
-                      position: "absolute", left: m.left, top: mTopPx,
-                      transform: "translateX(-50%)",
-                      display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
-                      zIndex: 2, opacity: reached ? 1 : 0.38,
-                      transition: "opacity 0.8s ease",
-                      animation: reached ? "milestoneGlow 2.2s ease-in-out infinite" : undefined,
-                    }}>
-                      <span style={{ fontSize: 18, lineHeight: 1 }}>{m.planet}</span>
-                      <span style={{
-                        fontSize: 7.5, fontWeight: 900, whiteSpace: "nowrap",
-                        color: reached ? m.glow : "rgba(255,255,255,0.3)",
-                        textShadow: reached ? `0 0 5px ${m.glow}` : "none",
-                      }}>{m.label}</span>
-                    </div>
-                  );
-                })}
+                {/* 지나온 행성 (dim, 아래) */}
+                {passedCount > 0 && (
+                  <div style={{
+                    position: "absolute", left: `${fromLeft}%`, bottom: PLANET_FROM_BTM,
+                    transform: "translateX(-50%)",
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+                    zIndex: 2, opacity: 0.3,
+                  }}>
+                    <span style={{ fontSize: 13, lineHeight: 1 }}>{PLANET_EMOJIS[fromIdx]}</span>
+                    <span style={{ fontSize: 7, fontWeight: 900, color: "rgba(255,255,255,0.28)", whiteSpace: "nowrap" }}>
+                      {fmtM(fromAmt)}
+                    </span>
+                  </div>
+                )}
 
-                {/* 로켓 (단일 — 중앙) */}
+                {/* 다음 목표 행성 (bright, 중간) */}
                 <div style={{
-                  position: "absolute", left: "50%",
+                  position: "absolute", left: `${toLeft}%`, bottom: PLANET_TO_BTM,
+                  transform: "translateX(-50%)",
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+                  zIndex: 2, animation: "milestoneGlow 2.2s ease-in-out infinite",
+                }}>
+                  <span style={{ fontSize: 20, lineHeight: 1 }}>{PLANET_EMOJIS[toIdx]}</span>
+                  <span style={{
+                    fontSize: 8, fontWeight: 900, whiteSpace: "nowrap",
+                    color: PLANET_GLOWS[toIdx], textShadow: `0 0 6px ${PLANET_GLOWS[toIdx]}`,
+                  }}>{fmtM(toAmt)}</span>
+                </div>
+
+                {/* 그 다음 행성 (반투명, 위) */}
+                <div style={{
+                  position: "absolute", left: `${afterLeft}%`, bottom: PLANET_AFTER_BTM,
+                  transform: "translateX(-50%)",
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+                  zIndex: 2, opacity: 0.45,
+                }}>
+                  <span style={{ fontSize: 14, lineHeight: 1 }}>{PLANET_EMOJIS[afterIdx]}</span>
+                  <span style={{ fontSize: 7, fontWeight: 900, color: "rgba(255,255,255,0.3)", whiteSpace: "nowrap" }}>
+                    {fmtM(afterAmt)}
+                  </span>
+                </div>
+
+                {/* 로켓 */}
+                <div style={{
+                  position: "absolute",
+                  left: `${rocketLeftPct}%`,
                   bottom: rocketBottom,
                   transform: "translateX(-50%)",
-                  transition: "bottom 1.4s cubic-bezier(0.34,1.56,0.64,1)",
+                  transition: "bottom 1.4s cubic-bezier(0.34,1.56,0.64,1), left 1.4s cubic-bezier(0.34,1.56,0.64,1)",
                   textAlign: "center", zIndex: 5,
                   animation: "rocketFloat 2.2s ease-in-out infinite",
                 }}>
                   <div style={{ fontSize: 26 }}>🚀</div>
-                  {/* 2색 불꽃: 겹치도록 position absolute */}
                   <div style={{
-                    position: "relative",
-                    margin: "2px auto 0",
-                    width: 26,
-                    height: flameBaseH + flameMaxAdd,
+                    position: "relative", margin: "2px auto 0",
+                    width: flameContainerW, height: Math.max(heightA, heightB),
                     transition: "all 1s ease",
                   }}>
-                    {/* userA 불꽃 — 왼쪽으로 살짝 치우침 */}
                     <div style={{
                       position: "absolute", bottom: 0, left: 0,
-                      width: "72%",
-                      height: Math.max(flameBaseH + expRatioA * flameMaxAdd, flameBaseH + 4),
-                      background: `linear-gradient(180deg, ${colorA}, ${colorA}bb 50%, ${colorA}66)`,
+                      width: widthA, height: heightA,
+                      background: `linear-gradient(180deg, ${colorA}, ${colorA}99 55%, transparent)`,
                       borderRadius: "50% 20% 55% 60%",
                       animation: "flameFlicker 0.15s ease-in-out infinite",
-                      filter: "blur(2px) saturate(3) brightness(0.9)",
-                      opacity: 0.92,
-                      transition: "all 1s ease",
+                      filter: "blur(2px) saturate(3) brightness(0.85)",
+                      opacity: 0.93, transition: "all 1s ease",
                     }} />
-                    {/* userB 불꽃 — 오른쪽으로 살짝 치우침, 중앙에서 겹침 */}
                     <div style={{
                       position: "absolute", bottom: 0, right: 0,
-                      width: "72%",
-                      height: Math.max(flameBaseH + expRatioB * flameMaxAdd, flameBaseH + 4),
-                      background: `linear-gradient(180deg, ${colorB}, ${colorB}bb 50%, ${colorB}66)`,
+                      width: widthB, height: heightB,
+                      background: `linear-gradient(180deg, ${colorB}, ${colorB}99 55%, transparent)`,
                       borderRadius: "20% 50% 60% 55%",
                       animation: "flameFlicker 0.15s ease-in-out infinite",
                       animationDelay: "0.08s",
-                      filter: "blur(2px) saturate(3) brightness(0.9)",
-                      opacity: 0.92,
-                      transition: "all 1s ease",
+                      filter: "blur(2px) saturate(3) brightness(0.85)",
+                      opacity: 0.93, transition: "all 1s ease",
                     }} />
                   </div>
                 </div>
@@ -883,7 +951,7 @@ const getPercent = (owner: string) => {
                   backdropFilter: "blur(4px)",
                   border: "1px solid rgba(255,228,80,0.3)",
                 }}>
-                  {(progress * 100).toFixed(1)}%
+                  {lap > 0 ? `${lap}바퀴 · ` : ""}{passedCount}/{COUNT}
                 </div>
               </div>
 
