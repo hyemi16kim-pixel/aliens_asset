@@ -236,6 +236,11 @@ function TransactionsContent() {
   const [ownerNames, setOwnerNames] = useState(["공동"]);
 
   const [dayRange, setDayRange] = useState<number>(1);
+  const [customRange, setCustomRange] = useState<{ start: Date; end: Date } | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [pickerMonth, setPickerMonth] = useState(() => new Date());
+  const [pickerDragStart, setPickerDragStart] = useState<Date | null>(null);
+  const [pickerDragEnd, setPickerDragEnd] = useState<Date | null>(null);
 
   const [dayDetailFilter, setDayDetailFilter] = useState<"ALL" | "INCOME" | "EXPENSE" | "TRANSFER" | "STOCK">("ALL");
   const [categoryFilter, setCategoryFilter] = useState<string>("전체");
@@ -330,9 +335,12 @@ function TransactionsContent() {
     return transactions.filter((tx: any) => {
       let inRange: boolean;
       if (viewMode === "LIST") {
-        // LIST 뷰: 오늘 기준 dayRange, 월 이동 시 같은 날짜를 해당 월에 적용
         const txDate = new Date(tx.transactionAt);
-        inRange = txDate >= dayRangeAnchor.start && txDate <= dayRangeAnchor.end;
+        if (customRange) {
+          inRange = txDate >= customRange.start && txDate <= customRange.end;
+        } else {
+          inRange = txDate >= dayRangeAnchor.start && txDate <= dayRangeAnchor.end;
+        }
       } else {
         // 달력 뷰: 선택된 월 범위 전체
         inRange = isDateInRange(new Date(tx.transactionAt), monthRange.start, monthRange.end);
@@ -588,7 +596,11 @@ function TransactionsContent() {
               >
                 {monthLabel}
                 <span style={{ fontSize: 10, color: "#B0A8C8", fontWeight: 600 }}>
-                  {viewMode === "LIST" ? dayRangeAnchor.label : monthRangeLabel}
+                  {viewMode === "LIST"
+                    ? customRange
+                      ? `${String(customRange.start.getMonth()+1).padStart(2,"0")}/${String(customRange.start.getDate()).padStart(2,"0")}~${String(customRange.end.getMonth()+1).padStart(2,"0")}/${String(customRange.end.getDate()).padStart(2,"0")}`
+                      : dayRangeAnchor.label
+                    : monthRangeLabel}
                 </span>
                 <ChevronDown size={14} color="#B0A8C8" />
               </button>
@@ -597,15 +609,15 @@ function TransactionsContent() {
               </button>
             </div>
 
-            {/* 날짜 범위 필터 칩 — LIST 뷰 전용, 카드 내 가운데 정렬 */}
+            {/* 날짜 범위 필터 칩 — LIST 뷰 전용 */}
             {viewMode === "LIST" && (
-              <div style={{ display: "flex", justifyContent: "center", gap: 7, marginBottom: 12 }}>
-                {([1, 3, 7, 14, 30] as const).map((d) => {
-                  const active = dayRange === d;
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 7, marginBottom: 12 }}>
+                {([1, 3, 7] as const).map((d) => {
+                  const active = !customRange && dayRange === d;
                   return (
                     <button
                       key={d}
-                      onClick={() => setDayRange(d)}
+                      onClick={() => { setDayRange(d); setCustomRange(null); }}
                       style={{
                         height: 28, padding: "0 12px", borderRadius: 999,
                         fontSize: 12, fontWeight: 800, cursor: "pointer",
@@ -619,6 +631,112 @@ function TransactionsContent() {
                     </button>
                   );
                 })}
+                {/* 달력 아이콘 버튼 */}
+                <button
+                  onClick={() => { setShowDatePicker(true); setPickerMonth(new Date()); setPickerDragStart(null); setPickerDragEnd(null); }}
+                  style={{
+                    height: 28, width: 28, borderRadius: 999,
+                    display: "grid", placeItems: "center", cursor: "pointer",
+                    border: customRange ? `1.5px solid ${activeColor}` : "1.5px solid #E8E1F5",
+                    background: customRange ? `${activeColor}18` : "#FAFAFF",
+                    color: customRange ? activeColor : "#A59DBD",
+                  }}
+                >
+                  <CalendarDays size={14} />
+                </button>
+              </div>
+            )}
+
+            {/* 달력 날짜범위 선택 모달 */}
+            {showDatePicker && (
+              <div
+                style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+                onClick={() => setShowDatePicker(false)}
+              >
+                <div
+                  style={{ background: "#fff", borderRadius: "24px 24px 0 0", padding: "20px 16px 32px", width: "100%", maxWidth: 390 }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* 헤더 */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                    <button onClick={() => setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() - 1, 1))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 18 }}>‹</button>
+                    <strong style={{ fontSize: 14 }}>{pickerMonth.getFullYear()}년 {pickerMonth.getMonth() + 1}월</strong>
+                    <button onClick={() => setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 1))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 18 }}>›</button>
+                  </div>
+                  {/* 요일 */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", textAlign: "center", marginBottom: 6 }}>
+                    {["일","월","화","수","목","금","토"].map(d => <span key={d} style={{ fontSize: 11, color: "#A59DBD", fontWeight: 700 }}>{d}</span>)}
+                  </div>
+                  {/* 날짜 그리드 */}
+                  {(() => {
+                    const firstDay = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth(), 1).getDay();
+                    const daysInMonth = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 0).getDate();
+                    const cells: (Date | null)[] = Array(firstDay).fill(null);
+                    for (let i = 1; i <= daysInMonth; i++) {
+                      cells.push(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth(), i));
+                    }
+                    // 터치 이벤트로 드래그 범위 계산
+                    const getDateFromTouch = (e: React.TouchEvent) => {
+                      const touch = e.touches[0] || e.changedTouches[0];
+                      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+                      const attr = el?.getAttribute("data-date");
+                      return attr ? new Date(attr) : null;
+                    };
+                    const rangeStart = pickerDragStart && pickerDragEnd
+                      ? (pickerDragStart <= pickerDragEnd ? pickerDragStart : pickerDragEnd)
+                      : pickerDragStart;
+                    const rangeEnd = pickerDragStart && pickerDragEnd
+                      ? (pickerDragStart <= pickerDragEnd ? pickerDragEnd : pickerDragStart)
+                      : pickerDragStart;
+                    const inPickerRange = (d: Date) => rangeStart && rangeEnd
+                      ? d >= rangeStart && d <= rangeEnd : false;
+                    return (
+                      <div
+                        style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "3px 0", userSelect: "none" }}
+                        onTouchStart={(e) => { const d = getDateFromTouch(e); if (d) { setPickerDragStart(d); setPickerDragEnd(d); } }}
+                        onTouchMove={(e) => { const d = getDateFromTouch(e); if (d && pickerDragStart) setPickerDragEnd(d); }}
+                        onTouchEnd={() => {
+                          if (pickerDragStart && pickerDragEnd) {
+                            const s = pickerDragStart <= pickerDragEnd ? pickerDragStart : pickerDragEnd;
+                            const en = pickerDragStart <= pickerDragEnd ? pickerDragEnd : pickerDragStart;
+                            s.setHours(0, 0, 0, 0);
+                            en.setHours(23, 59, 59, 999);
+                            setCustomRange({ start: s, end: en });
+                            setShowDatePicker(false);
+                          }
+                        }}
+                      >
+                        {cells.map((d, i) => {
+                          if (!d) return <div key={`empty-${i}`} />;
+                          const isInRange = inPickerRange(d);
+                          const isStart = rangeStart && d.toDateString() === rangeStart.toDateString();
+                          const isEnd = rangeEnd && d.toDateString() === rangeEnd.toDateString();
+                          return (
+                            <div
+                              key={d.toISOString()}
+                              data-date={d.toISOString()}
+                              style={{
+                                height: 36, display: "grid", placeItems: "center",
+                                fontSize: 13, fontWeight: isStart || isEnd ? 900 : 600,
+                                borderRadius: isStart || isEnd ? "50%" : 0,
+                                background: isStart || isEnd ? activeColor : isInRange ? `${activeColor}25` : "transparent",
+                                color: isStart || isEnd ? "#fff" : isInRange ? activeColor : "#3D3558",
+                                cursor: "pointer",
+                              }}
+                            >
+                              {d.getDate()}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                  {pickerDragStart && (
+                    <div style={{ textAlign: "center", marginTop: 12, fontSize: 12, color: "#A59DBD" }}>
+                      드래그해서 범위를 선택하세요
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
