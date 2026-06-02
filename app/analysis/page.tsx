@@ -684,11 +684,11 @@ const getPercent = (owner: string) => {
 
       <section style={cardStyle}>
         <style>{`
-          @keyframes rocketFloat { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(-5px)} }
-          @keyframes flameFlicker { 0%,100%{transform:scaleX(1) scaleY(1)} 30%{transform:scaleX(1.15) scaleY(0.9)} 60%{transform:scaleX(0.85) scaleY(1.1)} }
-          @keyframes starTwinkle { 0%,100%{opacity:0.2} 50%{opacity:0.9} }
-          @keyframes planetFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
-          @keyframes planetSpin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
+          @keyframes rocketFloat { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(-6px)} }
+          @keyframes flameFlicker { 0%,100%{transform:scaleX(1) scaleY(1)} 30%{transform:scaleX(1.2) scaleY(0.88)} 60%{transform:scaleX(0.85) scaleY(1.12)} }
+          @keyframes starTwinkle { 0%,100%{opacity:0.12} 50%{opacity:1} }
+          @keyframes milestoneGlow { 0%,100%{filter:brightness(1) drop-shadow(0 0 3px currentColor)} 50%{filter:brightness(1.4) drop-shadow(0 0 7px currentColor)} }
+          @keyframes earthAtmo { 0%,100%{box-shadow:0 0 22px rgba(79,195,247,0.5),0 0 8px rgba(79,195,247,0.25)} 50%{box-shadow:0 0 34px rgba(79,195,247,0.7),0 0 16px rgba(79,195,247,0.4)} }
         `}</style>
         <div style={spendingHeaderStyle}>
           <strong style={{ fontSize: 14 }}>커플 로켓 🚀</strong>
@@ -704,7 +704,6 @@ const getPercent = (owner: string) => {
           const totalExp = expA + expB;
           const expRatioA = totalExp > 0 ? expA / totalExp : 0.5;
           const expRatioB = totalExp > 0 ? expB / totalExp : 0.5;
-
           const incShared = incomeMap["공동"] || 0;
           const incA = (incomeMap[userA] || 0) + incShared / 2;
           const incB = (incomeMap[userB] || 0) + incShared / 2;
@@ -712,137 +711,222 @@ const getPercent = (owner: string) => {
           const incRatioA = totalInc > 0 ? incA / totalInc : 0.5;
           const incRatioB = totalInc > 0 ? incB / totalInc : 0.5;
 
-          const maxTravel = 100;
-          const flameBaseH = 14;
-          const flameMaxAdd = 32;
+          // 총 자산 (부채 제외)
+          const totalAssets = accounts.reduce((sum, account) => {
+            if (account.type === "LOAN" || account.type === "CARD") return sum;
+            if (account.type === "STOCK") return sum + Number(stockMarketValues[account.id] || account.stockCash || 0);
+            return sum + Number(account.balance || 0);
+          }, 0);
+
+          const GOAL = 1_000_000_000; // 10억
+          const progress = Math.min(Math.max(totalAssets / GOAL, 0), 1);
+
+          // 좌표계: 컨테이너 300px, 지구 100px (bottom:-18 → 82px 보임)
+          const CONTAINER_H = 300;
+          const ROCKET_MIN = 90;   // 지구 위 시작점
+          const ROCKET_MAX = 258;  // 목표 도달 위치
+          const rocketBottom = ROCKET_MIN + progress * (ROCKET_MAX - ROCKET_MIN);
+
+          const flameBaseH = 11;
+          const flameMaxAdd = 24;
+
+          // 마일스톤 행성 (좌우 교차 배치 → 궤도 느낌)
+          const milestones = [
+            { amount: 100_000_000,   label: "1억",   planet: "🌙", left: "78%", glow: "rgba(200,200,255,0.9)" },
+            { amount: 300_000_000,   label: "3억",   planet: "🔴", left: "16%", glow: "rgba(255,140,110,0.9)" },
+            { amount: 500_000_000,   label: "5억",   planet: "🪐", left: "80%", glow: "rgba(176,120,255,0.9)" },
+            { amount: 700_000_000,   label: "7억",   planet: "🌍", left: "14%", glow: "rgba(100,210,130,0.9)" },
+            { amount: 1_000_000_000, label: "10억 🎯", planet: "⭐", left: "50%", glow: "rgba(255,228,80,0.95)" },
+          ];
 
           return (
             <>
               {/* 우주 배경 */}
-              <div style={{ position: "relative", height: 200, background: "linear-gradient(135deg,#2D0A4E 0%,#5B1A6E 30%,#8B2A7A 60%,#C2407A 100%)", borderRadius: 16, overflow: "hidden", marginTop: 20, marginBottom: 10 }}>
+              <div style={{
+                position: "relative", height: CONTAINER_H,
+                background: "linear-gradient(180deg, #020010 0%, #0B0330 28%, #160840 55%, #0E2060 100%)",
+                borderRadius: 18, overflow: "hidden", marginTop: 14, marginBottom: 12,
+              }}>
+
                 {/* 별 */}
-                {[...Array(14)].map((_, i) => (
+                {[...Array(22)].map((_, i) => (
                   <div key={i} style={{
                     position: "absolute", borderRadius: "50%",
-                    width: i % 3 === 0 ? 3 : 2, height: i % 3 === 0 ? 3 : 2,
+                    width: i % 5 === 0 ? 2.5 : i % 3 === 0 ? 2 : 1.5,
+                    height: i % 5 === 0 ? 2.5 : i % 3 === 0 ? 2 : 1.5,
                     background: "#fff",
-                    left: `${(i * 41 + 7) % 88}%`, top: `${(i * 29 + 4) % 65}%`,
-                    animation: `starTwinkle ${1.2 + (i % 4) * 0.4}s ease-in-out infinite`,
-                    animationDelay: `${(i * 0.25) % 2}s`,
+                    left: `${(i * 43 + 9) % 92}%`,
+                    top: `${(i * 31 + 5) % 78}%`,
+                    animation: `starTwinkle ${1.0 + (i % 5) * 0.36}s ease-in-out infinite`,
+                    animationDelay: `${(i * 0.3) % 2.8}s`,
                   }} />
                 ))}
-                {/* 행성 1 - 큰 보라 행성 */}
+
+                {/* 궤도 점선: 로켓 A (30%) */}
                 <div style={{
-                  position: "absolute", top: 12, right: 18,
-                  width: 38, height: 38, borderRadius: "50%",
-                  background: "radial-gradient(circle at 35% 35%, #B07FFF, #6B2FCC)",
-                  boxShadow: "0 0 12px rgba(176,127,255,0.5)",
-                  animation: "planetFloat 3.5s ease-in-out infinite",
-                }}>
-                  {/* 고리 */}
-                  <div style={{
-                    position: "absolute", top: "38%", left: "-30%",
-                    width: "160%", height: "22%",
-                    border: "2.5px solid rgba(200,160,255,0.5)",
-                    borderRadius: "50%",
-                    transform: "rotateX(65deg)",
-                  }} />
-                </div>
-                {/* 행성 2 - 작은 분홍 행성 */}
-                <div style={{
-                  position: "absolute", top: 22, left: 14,
-                  width: 22, height: 22, borderRadius: "50%",
-                  background: "radial-gradient(circle at 35% 35%, #FFB3E6, #E0529A)",
-                  boxShadow: "0 0 8px rgba(255,100,180,0.4)",
-                  animation: "planetFloat 4.2s ease-in-out infinite",
-                  animationDelay: "1s",
+                  position: "absolute", left: "30%", top: 12,
+                  bottom: ROCKET_MIN + 4, width: 0,
+                  borderLeft: "1.5px dashed rgba(176,130,255,0.25)",
+                  transform: "translateX(-50%)", zIndex: 1,
                 }} />
-                {/* 행성 3 - 중간 민트 행성 */}
+                {/* 궤도 점선: 로켓 B (70%) */}
                 <div style={{
-                  position: "absolute", top: 8, left: "45%",
-                  width: 16, height: 16, borderRadius: "50%",
-                  background: "radial-gradient(circle at 35% 35%, #A8FFE8, #2EC4A0)",
-                  boxShadow: "0 0 6px rgba(46,196,160,0.4)",
-                  animation: "planetFloat 5s ease-in-out infinite",
-                  animationDelay: "0.5s",
+                  position: "absolute", left: "70%", top: 12,
+                  bottom: ROCKET_MIN + 4, width: 0,
+                  borderLeft: "1.5px dashed rgba(255,160,200,0.25)",
+                  transform: "translateX(-50%)", zIndex: 1,
                 }} />
+
+                {/* 마일스톤 행성 */}
+                {milestones.map((m) => {
+                  const mProgress = m.amount / GOAL;
+                  const mBottom = ROCKET_MIN + mProgress * (ROCKET_MAX - ROCKET_MIN);
+                  const mTopPx = CONTAINER_H - mBottom - 14;
+                  const reached = totalAssets >= m.amount;
+                  return (
+                    <div key={m.label} style={{
+                      position: "absolute", left: m.left, top: mTopPx,
+                      transform: "translateX(-50%)",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+                      zIndex: 2, opacity: reached ? 1 : 0.38,
+                      transition: "opacity 0.8s ease",
+                      animation: reached ? "milestoneGlow 2.2s ease-in-out infinite" : undefined,
+                    }}>
+                      <span style={{ fontSize: 18, lineHeight: 1 }}>{m.planet}</span>
+                      <span style={{
+                        fontSize: 7.5, fontWeight: 900, whiteSpace: "nowrap",
+                        color: reached ? m.glow : "rgba(255,255,255,0.3)",
+                        textShadow: reached ? `0 0 5px ${m.glow}` : "none",
+                      }}>{m.label}</span>
+                    </div>
+                  );
+                })}
 
                 {/* 로켓 A */}
                 <div style={{
-                  position: "absolute", left: "28%",
-                  bottom: 28 + incRatioA * maxTravel,
+                  position: "absolute", left: "30%",
+                  bottom: rocketBottom,
                   transform: "translateX(-50%)",
-                  transition: "bottom 1s cubic-bezier(0.34,1.56,0.64,1)",
-                  textAlign: "center",
+                  transition: "bottom 1.4s cubic-bezier(0.34,1.56,0.64,1)",
+                  textAlign: "center", zIndex: 5,
                   animation: "rocketFloat 2.2s ease-in-out infinite",
                 }}>
-                  <div style={{ fontSize: 30 }}>🚀</div>
+                  <div style={{ fontSize: 24 }}>🚀</div>
                   <div style={{
-                    margin: "0 auto",
-                    width: 12 + expRatioA * 12,
+                    margin: "2px auto 0",
+                    width: 8 + expRatioA * 9,
                     height: flameBaseH + expRatioA * flameMaxAdd,
-                    background: "linear-gradient(180deg,#FF9500,#FF3B00 50%,#FF6B00)",
+                    background: "linear-gradient(180deg,#FFE033,#FF8800 40%,#FF3300)",
                     borderRadius: "40% 40% 60% 60%",
                     animation: "flameFlicker 0.15s ease-in-out infinite",
-                    filter: "blur(1.5px)",
+                    filter: "blur(1.5px)", opacity: 0.95,
                     transition: "all 1s ease",
-                    opacity: 0.92,
                   }} />
                 </div>
+                {/* 이름 A (로켓 아래) */}
+                <div style={{
+                  position: "absolute", left: "30%",
+                  bottom: rocketBottom - 18,
+                  transform: "translateX(-50%)",
+                  transition: "bottom 1.4s cubic-bezier(0.34,1.56,0.64,1)",
+                  fontSize: 9, color: "#D4BCFF", fontWeight: 900,
+                  textShadow: "0 1px 4px rgba(0,0,0,0.7)", zIndex: 6,
+                }}>{userA}</div>
 
                 {/* 로켓 B */}
                 <div style={{
-                  position: "absolute", left: "72%",
-                  bottom: 28 + incRatioB * maxTravel,
+                  position: "absolute", left: "70%",
+                  bottom: rocketBottom,
                   transform: "translateX(-50%)",
-                  transition: "bottom 1s cubic-bezier(0.34,1.56,0.64,1)",
-                  textAlign: "center",
+                  transition: "bottom 1.4s cubic-bezier(0.34,1.56,0.64,1)",
+                  textAlign: "center", zIndex: 5,
                   animation: "rocketFloat 2.5s ease-in-out infinite",
                   animationDelay: "0.5s",
                 }}>
-                  <div style={{ fontSize: 30 }}>🚀</div>
+                  <div style={{ fontSize: 24 }}>🚀</div>
                   <div style={{
-                    margin: "0 auto",
-                    width: 12 + expRatioB * 12,
+                    margin: "2px auto 0",
+                    width: 8 + expRatioB * 9,
                     height: flameBaseH + expRatioB * flameMaxAdd,
-                    background: "linear-gradient(180deg,#FF9500,#FF3B00 50%,#FF6B00)",
+                    background: "linear-gradient(180deg,#FFE033,#FF8800 40%,#FF3300)",
                     borderRadius: "40% 40% 60% 60%",
                     animation: "flameFlicker 0.15s ease-in-out infinite",
-                    animationDelay: "0.07s",
-                    filter: "blur(1.5px)",
+                    animationDelay: "0.08s",
+                    filter: "blur(1.5px)", opacity: 0.95,
                     transition: "all 1s ease",
-                    opacity: 0.92,
                   }} />
                 </div>
-
-                {/* 이름 라벨 */}
-                <div style={{ position: "absolute", bottom: 6, left: "28%", transform: "translateX(-50%)", fontSize: 10, color: "#FFD6F0", fontWeight: 800, zIndex: 2 }}>{userA}</div>
-                <div style={{ position: "absolute", bottom: 6, left: "72%", transform: "translateX(-50%)", fontSize: 10, color: "#FFD6F0", fontWeight: 800, zIndex: 2 }}>{userB}</div>
-
-                {/* 지구 */}
+                {/* 이름 B (로켓 아래) */}
                 <div style={{
-                  position: "absolute", bottom: -60, left: "50%",
+                  position: "absolute", left: "70%",
+                  bottom: rocketBottom - 18,
                   transform: "translateX(-50%)",
-                  width: 220, height: 220, borderRadius: "50%",
-                  background: "radial-gradient(circle at 40% 35%, #4FC3F7, #1565C0 40%, #0D47A1 70%, #01579B)",
-                  boxShadow: "0 0 20px rgba(79,195,247,0.4), inset -10px -10px 30px rgba(0,0,50,0.4)",
-                  overflow: "hidden",
+                  transition: "bottom 1.4s cubic-bezier(0.34,1.56,0.64,1)",
+                  fontSize: 9, color: "#FFD0EE", fontWeight: 900,
+                  textShadow: "0 1px 4px rgba(0,0,0,0.7)", zIndex: 6,
+                }}>{userB}</div>
+
+                {/* 지구 (출발점 — 하단 중앙, 명확히 보임) */}
+                <div style={{
+                  position: "absolute", bottom: -18, left: "50%",
+                  transform: "translateX(-50%)",
+                  width: 104, height: 104, borderRadius: "50%",
+                  background: "radial-gradient(circle at 38% 32%, #5FC8F8, #1565C0 45%, #0D47A1 75%)",
+                  animation: "earthAtmo 3.5s ease-in-out infinite",
+                  overflow: "hidden", zIndex: 3,
                 }}>
-                  {/* 대륙 */}
-                  <div style={{ position: "absolute", top: "18%", left: "15%", width: "28%", height: "22%", background: "rgba(76,175,80,0.75)", borderRadius: "40% 60% 50% 70%" }} />
-                  <div style={{ position: "absolute", top: "12%", left: "48%", width: "20%", height: "18%", background: "rgba(76,175,80,0.7)", borderRadius: "60% 40% 70% 30%" }} />
-                  <div style={{ position: "absolute", top: "30%", left: "60%", width: "24%", height: "16%", background: "rgba(76,175,80,0.65)", borderRadius: "50% 50% 40% 60%" }} />
-                  {/* 구름 */}
-                  <div style={{ position: "absolute", top: "8%", left: "20%", width: "35%", height: "8%", background: "rgba(255,255,255,0.35)", borderRadius: 999 }} />
-                  <div style={{ position: "absolute", top: "38%", left: "10%", width: "25%", height: "6%", background: "rgba(255,255,255,0.3)", borderRadius: 999 }} />
+                  <div style={{ position: "absolute", top: "16%", left: "10%", width: "28%", height: "20%", background: "rgba(76,175,80,0.75)", borderRadius: "40% 60% 50% 70%" }} />
+                  <div style={{ position: "absolute", top: "12%", left: "50%", width: "22%", height: "17%", background: "rgba(76,175,80,0.7)", borderRadius: "60% 40% 70% 30%" }} />
+                  <div style={{ position: "absolute", top: "36%", left: "63%", width: "24%", height: "13%", background: "rgba(76,175,80,0.65)", borderRadius: "50% 50% 40% 60%" }} />
+                  <div style={{ position: "absolute", top: "5%", left: "18%", width: "40%", height: "8%", background: "rgba(255,255,255,0.28)", borderRadius: 999 }} />
+                  <div style={{ position: "absolute", top: "38%", left: "6%", width: "28%", height: "6%", background: "rgba(255,255,255,0.22)", borderRadius: 999 }} />
+                </div>
+
+                {/* 출발 레이블 */}
+                <div style={{
+                  position: "absolute", bottom: 5, left: "50%",
+                  transform: "translateX(-50%)",
+                  fontSize: 8, color: "rgba(140,210,255,0.75)", fontWeight: 900,
+                  letterSpacing: 0.5, zIndex: 4,
+                }}>🌍 지구 출발</div>
+
+                {/* 진행률 배지 */}
+                <div style={{
+                  position: "absolute", top: 9, right: 10,
+                  background: "rgba(0,0,0,0.52)",
+                  borderRadius: 999, padding: "3px 9px",
+                  fontSize: 9.5, color: "#FFE566", fontWeight: 900,
+                  backdropFilter: "blur(4px)",
+                  border: "1px solid rgba(255,228,80,0.3)",
+                }}>
+                  {(progress * 100).toFixed(1)}%
+                </div>
+              </div>
+
+              {/* 진행 바 */}
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#9B8EC8", marginBottom: 5 }}>
+                  <span>현재 자산 <strong style={{ color: "#7C5CFF" }}>
+                    {totalAssets >= 100_000_000
+                      ? `${(totalAssets / 100_000_000).toFixed(1)}억`
+                      : `${Math.round(totalAssets / 10_000).toLocaleString()}만`}원
+                  </strong></span>
+                  <span>목표 <strong style={{ color: "#FF6B9D" }}>10억</strong></span>
+                </div>
+                <div style={{ height: 6, background: "#EDE6F9", borderRadius: 999, overflow: "hidden" }}>
+                  <div style={{
+                    height: "100%", width: `${progress * 100}%`,
+                    background: "linear-gradient(90deg, #7C5CFF, #A78BFA)",
+                    borderRadius: 999, transition: "width 1.4s ease",
+                  }} />
                 </div>
               </div>
 
               {/* 스탯 */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 {[
-                  { name: userA, expRatio: expRatioA, incRatio: incRatioA, exp: expA, inc: incA },
-                  { name: userB, expRatio: expRatioB, incRatio: incRatioB, exp: expB, inc: incB },
+                  { name: userA, expRatio: expRatioA, incRatio: incRatioA },
+                  { name: userB, expRatio: expRatioB, incRatio: incRatioB },
                 ].map((u) => (
                   <div key={u.name} style={{ background: "#F4F0FF", borderRadius: 12, padding: "10px 12px" }}>
                     <div style={{ fontSize: 11, fontWeight: 800, color: "#7C5CFF", marginBottom: 6 }}>{u.name}</div>
