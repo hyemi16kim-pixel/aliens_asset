@@ -245,6 +245,7 @@ function AnalysisPageContent() {
   useModalBack(!!selectedStockAccount, () => setSelectedStockAccount(null));
   const [trendMoneyType, setTrendMoneyType] = useState<"EXPENSE" | "INCOME">("EXPENSE");
   const [selectedTrendCategory, setSelectedTrendCategory] = useState<string | null>(null);
+  const [includeDebt, setIncludeDebt] = useState(true);
   const [budgets, setBudgets] = useState<Record<string, number>>({});
     
   const [monthStartDay, setMonthStartDay] = useState(1);
@@ -805,15 +806,14 @@ const getPercent = (owner: string) => {
   const lastMonthDate = new Date(currentYear, currentMonth - 1, 1);
 
   const totalAsset = accounts.reduce((sum, account) => {
-    // LOAN / CARD: 부채이므로 차감
     if (account.type === "LOAN" || account.type === "CARD") {
+      // 빚 제외 모드면 부채 계좌 스킵
+      if (!includeDebt) return sum;
       return sum - Math.abs(Number(account.balance || 0));
     }
-    // STOCK: 예수금 기준 (stockCash) — 평가금액은 별도 카드에서 표시
     if (account.type === "STOCK") {
       return sum + Number(account.stockCash || 0);
     }
-    // 나머지 (BANK, CASH, SAVING, ETC): 잔액 그대로 합산
     return sum + Number(account.balance || 0);
   }, 0);
 
@@ -899,7 +899,22 @@ const lastMonthExpenses = expenses.filter((tx) =>
   return (
     <>
       <section style={cardStyle}>
-        <strong style={{ fontSize: 14 }}>순자산 변화</strong>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <strong style={{ fontSize: 14 }}>순자산 변화</strong>
+          <button
+            type="button"
+            onClick={() => setIncludeDebt((v) => !v)}
+            style={{
+              fontSize: 11, fontWeight: 800, cursor: "pointer",
+              border: `1.5px solid ${includeDebt ? "#FF3B70" : theme.colors.border}`,
+              background: includeDebt ? "#FFF0F4" : "rgba(255,255,255,0.8)",
+              color: includeDebt ? "#FF3B70" : theme.colors.subtext,
+              borderRadius: 999, padding: "4px 10px",
+            }}
+          >
+            {includeDebt ? "빚 포함" : "빚 제외"}
+          </button>
+        </div>
 
         <div style={netAssetBoxStyle}>
           <span style={smallSubTextStyle}>현재 총 자산</span>
