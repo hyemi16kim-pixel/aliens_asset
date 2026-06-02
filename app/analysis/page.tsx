@@ -398,6 +398,15 @@ const ownerMap = ownerMonthExpenses.reduce<Record<string, number>>((acc, tx) => 
   return acc;
 }, {});
 
+const ownerMonthIncome = transactions.filter((tx) =>
+  tx.type === "INCOME" && isDateInRange(tx.transactionAt, ownerRange.start, ownerRange.end)
+);
+const incomeMap = ownerMonthIncome.reduce<Record<string, number>>((acc, tx) => {
+  const owner = tx.owner || "미지정";
+  acc[owner] = (acc[owner] || 0) + tx.amount;
+  return acc;
+}, {});
+
 const getPercent = (owner: string) => {
   const userA = users[0]?.name || "나";
   const userB = users[1]?.name || "파트너";
@@ -674,28 +683,125 @@ const getPercent = (owner: string) => {
       </section>
 
       <section style={cardStyle}>
+        <style>{`
+          @keyframes rocketFloat { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(-5px)} }
+          @keyframes flameFlicker { 0%,100%{transform:scaleX(1) scaleY(1)} 30%{transform:scaleX(1.15) scaleY(0.9)} 60%{transform:scaleX(0.85) scaleY(1.1)} }
+          @keyframes starTwinkle { 0%,100%{opacity:0.2} 50%{opacity:0.9} }
+        `}</style>
         <div style={spendingHeaderStyle}>
-          <strong style={{ fontSize: 14 }}>커플 지출 비중</strong>
-          <span style={smallSubTextStyle}>
-            {formatMonthRangeLabel(ownerRange.start, ownerRange.end)}
-          </span>
+          <strong style={{ fontSize: 14 }}>커플 로켓 🚀</strong>
+          <span style={smallSubTextStyle}>{formatMonthRangeLabel(ownerRange.start, ownerRange.end)}</span>
         </div>
 
-        <div style={coupleStyle}>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 34 }}>👽</div>
-            <strong>{users[0]?.name || "나"}</strong>
-            <p style={percentText}>{getPercent(users[0]?.name || "나")}</p>
-          </div>
+        {(() => {
+          const userA = users[0]?.name || "나";
+          const userB = users[1]?.name || "파트너";
+          const shared = ownerMap["공동"] || 0;
+          const expA = (ownerMap[userA] || 0) + shared / 2;
+          const expB = (ownerMap[userB] || 0) + shared / 2;
+          const totalExp = expA + expB;
+          const expRatioA = totalExp > 0 ? expA / totalExp : 0.5;
+          const expRatioB = totalExp > 0 ? expB / totalExp : 0.5;
 
-          <div style={{ fontSize: 24 }}>💗</div>
+          const incShared = incomeMap["공동"] || 0;
+          const incA = (incomeMap[userA] || 0) + incShared / 2;
+          const incB = (incomeMap[userB] || 0) + incShared / 2;
+          const totalInc = incA + incB;
+          const incRatioA = totalInc > 0 ? incA / totalInc : 0.5;
+          const incRatioB = totalInc > 0 ? incB / totalInc : 0.5;
 
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 34 }}>👽</div>
-            <strong>{users[1]?.name || "파트너"}</strong>
-            <p style={percentText}>{getPercent(users[1]?.name || "파트너")}</p>
-          </div>
-        </div>
+          const maxTravel = 100;
+          const flameBaseH = 14;
+          const flameMaxAdd = 32;
+
+          return (
+            <>
+              {/* 우주 배경 */}
+              <div style={{ position: "relative", height: 200, background: "linear-gradient(180deg,#08061A 0%,#130F30 60%,#1E1545 100%)", borderRadius: 16, overflow: "hidden", marginBottom: 10 }}>
+                {/* 별 */}
+                {[...Array(14)].map((_, i) => (
+                  <div key={i} style={{
+                    position: "absolute", borderRadius: "50%",
+                    width: i % 3 === 0 ? 3 : 2, height: i % 3 === 0 ? 3 : 2,
+                    background: "#fff",
+                    left: `${(i * 41 + 7) % 88}%`, top: `${(i * 29 + 4) % 65}%`,
+                    animation: `starTwinkle ${1.2 + (i % 4) * 0.4}s ease-in-out infinite`,
+                    animationDelay: `${(i * 0.25) % 2}s`,
+                  }} />
+                ))}
+
+                {/* 로켓 A */}
+                <div style={{
+                  position: "absolute", left: "28%",
+                  bottom: 28 + incRatioA * maxTravel,
+                  transform: "translateX(-50%)",
+                  transition: "bottom 1s cubic-bezier(0.34,1.56,0.64,1)",
+                  textAlign: "center",
+                  animation: "rocketFloat 2.2s ease-in-out infinite",
+                }}>
+                  <div style={{ fontSize: 30 }}>🚀</div>
+                  <div style={{
+                    margin: "0 auto",
+                    width: 12 + expRatioA * 12,
+                    height: flameBaseH + expRatioA * flameMaxAdd,
+                    background: "linear-gradient(180deg,#FF9500,#FF3B00 50%,#FF6B00)",
+                    borderRadius: "40% 40% 60% 60%",
+                    animation: "flameFlicker 0.15s ease-in-out infinite",
+                    filter: "blur(1.5px)",
+                    transition: "all 1s ease",
+                    opacity: 0.92,
+                  }} />
+                </div>
+
+                {/* 로켓 B */}
+                <div style={{
+                  position: "absolute", left: "72%",
+                  bottom: 28 + incRatioB * maxTravel,
+                  transform: "translateX(-50%)",
+                  transition: "bottom 1s cubic-bezier(0.34,1.56,0.64,1)",
+                  textAlign: "center",
+                  animation: "rocketFloat 2.5s ease-in-out infinite",
+                  animationDelay: "0.5s",
+                }}>
+                  <div style={{ fontSize: 30 }}>🚀</div>
+                  <div style={{
+                    margin: "0 auto",
+                    width: 12 + expRatioB * 12,
+                    height: flameBaseH + expRatioB * flameMaxAdd,
+                    background: "linear-gradient(180deg,#FF9500,#FF3B00 50%,#FF6B00)",
+                    borderRadius: "40% 40% 60% 60%",
+                    animation: "flameFlicker 0.15s ease-in-out infinite",
+                    animationDelay: "0.07s",
+                    filter: "blur(1.5px)",
+                    transition: "all 1s ease",
+                    opacity: 0.92,
+                  }} />
+                </div>
+
+                {/* 이름 라벨 */}
+                <div style={{ position: "absolute", bottom: 6, left: "28%", transform: "translateX(-50%)", fontSize: 10, color: "#C4B8FF", fontWeight: 800 }}>{userA}</div>
+                <div style={{ position: "absolute", bottom: 6, left: "72%", transform: "translateX(-50%)", fontSize: 10, color: "#C4B8FF", fontWeight: 800 }}>{userB}</div>
+
+                {/* 지면 */}
+                <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 22, background: "linear-gradient(180deg,#2A1F55,#1A1340)", borderTop: "1px solid #3D2F70" }} />
+              </div>
+
+              {/* 스탯 */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {[
+                  { name: userA, expRatio: expRatioA, incRatio: incRatioA, exp: expA, inc: incA },
+                  { name: userB, expRatio: expRatioB, incRatio: incRatioB, exp: expB, inc: incB },
+                ].map((u) => (
+                  <div key={u.name} style={{ background: "#F4F0FF", borderRadius: 12, padding: "10px 12px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: "#7C5CFF", marginBottom: 6 }}>{u.name}</div>
+                    <div style={{ fontSize: 11, color: "#8B7BAB", marginBottom: 2 }}>🚀 수입 {Math.round(u.incRatio * 100)}%</div>
+                    <div style={{ fontSize: 11, color: "#8B7BAB" }}>🔥 지출 {Math.round(u.expRatio * 100)}%</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          );
+        })()}
       </section>
     </>
   );
