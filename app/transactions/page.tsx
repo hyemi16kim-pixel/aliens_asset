@@ -354,7 +354,7 @@ function TransactionsContent() {
         : true;
       return inRange && topTypeMatch && modalTypeMatch && accountMatch;
     });
-  }, [transactions, filterType, viewMode, dayRange, monthRange, selectedType, selectedAccountId]);
+  }, [transactions, filterType, viewMode, dayRange, monthRange, selectedType, selectedAccountId, customRange]);
 
   // ALL 뷰에서 사용 중인 EXPENSE 카테고리 목록 (실제 데이터 기준)
   const expenseCategoriesInView = useMemo(() => {
@@ -645,11 +645,11 @@ function TransactionsContent() {
                   >
                     <CalendarDays size={14} />
                   </button>
-                  {customRange && (
-                    <span style={{ fontSize: 11, fontWeight: 800, color: activeColor }}>
-                      {`${customRange.start.getMonth()+1}/${customRange.start.getDate()}~${customRange.end.getMonth()+1}/${customRange.end.getDate()}`}
-                    </span>
-                  )}
+                  <span style={{ fontSize: 11, fontWeight: 800, color: customRange ? activeColor : "#A59DBD" }}>
+                    {customRange
+                      ? `${customRange.start.getMonth()+1}/${customRange.start.getDate()}~${customRange.end.getMonth()+1}/${customRange.end.getDate()}`
+                      : dayRangeAnchor.label}
+                  </span>
                 </div>
               </div>
             )}
