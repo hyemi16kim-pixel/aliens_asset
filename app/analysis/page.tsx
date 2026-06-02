@@ -875,7 +875,6 @@ const trendTotal = Object.values(trendCategoryMap).reduce((s, v) => s + v, 0);
 
 const trendCategories = Object.entries(trendCategoryMap)
   .sort((a, b) => b[1] - a[1])
-  .slice(0, 6)
   .map(([name, amount]) => ({
     name,
     amount,
