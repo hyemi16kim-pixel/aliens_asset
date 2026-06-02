@@ -247,6 +247,7 @@ function AnalysisPageContent() {
   const [selectedTrendCategory, setSelectedTrendCategory] = useState<string | null>(null);
   const [includeDebt, setIncludeDebt] = useState(true);
   const [showBudgetInTrend, setShowBudgetInTrend] = useState(false);
+  const [spendingMonth, setSpendingMonth] = useState<Date | null>(null); // null = 현재 월
   const [budgets, setBudgets] = useState<Record<string, number>>({});
     
   const [monthStartDay, setMonthStartDay] = useState(1);
@@ -445,7 +446,7 @@ const getPercent = (owner: string) => {
         </div>{/* /fixed header */}
 
 {tab === "SPENDING" && (() => {
-  const baseMonth = getBaseMonthByStartDay(new Date(), monthStartDay);
+  const baseMonth = spendingMonth ?? getBaseMonthByStartDay(new Date(), monthStartDay);
   const currentRange = getCustomMonthRange(baseMonth, monthStartDay);
 
   const monthExpenses = expenses.filter((tx) =>
@@ -526,9 +527,27 @@ const getPercent = (owner: string) => {
               );
             })()}
           </div>
-          <span style={smallSubTextStyle}>
-            {formatMonthRangeLabel(currentRange.start, currentRange.end)}
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <button
+              type="button"
+              onClick={() => setSpendingMonth(new Date(baseMonth.getFullYear(), baseMonth.getMonth() - 1, 1))}
+              style={{ border: "none", background: "none", cursor: "pointer", padding: "2px 4px", fontSize: 15, color: "#A59DBD" }}
+            >‹</button>
+            <span style={{ ...smallSubTextStyle, whiteSpace: "nowrap" }}>
+              {baseMonth.getMonth() + 1}월
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const next = new Date(baseMonth.getFullYear(), baseMonth.getMonth() + 1, 1);
+                const now = getBaseMonthByStartDay(new Date(), monthStartDay);
+                // 미래 월은 이동 불가
+                if (next <= now) setSpendingMonth(next > now ? null : next);
+                else setSpendingMonth(null);
+              }}
+              style={{ border: "none", background: "none", cursor: "pointer", padding: "2px 4px", fontSize: 15, color: "#A59DBD" }}
+            >›</button>
+          </div>
         </div>
 
         {topCategories.length === 0 ? (
