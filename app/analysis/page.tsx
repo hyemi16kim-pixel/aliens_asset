@@ -726,8 +726,9 @@ const getPercent = (owner: string) => {
           const isUserAMe = users[0]?.id === myId;
           const myColor    = (typeof window !== "undefined" ? localStorage.getItem("alien_my_color")      : null) || "#BFEFE0";
           const partColor  = (typeof window !== "undefined" ? localStorage.getItem("alien_partner_color") : null) || "#FFD6E8";
-          const colorA = isUserAMe ? myColor : partColor;
-          const colorB = isUserAMe ? partColor : myColor;
+          const safeColor = (c: string) => c.startsWith("#") && c.length > 7 ? c.slice(0, 7) : c;
+          const colorA = safeColor(isUserAMe ? myColor : partColor);
+          const colorB = safeColor(isUserAMe ? partColor : myColor);
 
           // 좌표계: 컨테이너 300px, 지구 100px (bottom:-18 → 82px 보임)
           const CONTAINER_H = 300;
