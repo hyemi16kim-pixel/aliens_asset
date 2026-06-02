@@ -721,9 +721,13 @@ const getPercent = (owner: string) => {
           const GOAL = 500_000_000; // 5억
           const progress = Math.min(Math.max(totalAssets / GOAL, 0), 1);
 
-          // 프로필 색상 (localStorage)
-          const colorA = (typeof window !== "undefined" ? localStorage.getItem("alien_my_color") : null) || "#BFEFE0";
-          const colorB = (typeof window !== "undefined" ? localStorage.getItem("alien_partner_color") : null) || "#FFD6E8";
+          // 프로필 색상: getCurrentUserId()로 누가 userA인지 판별 후 배정
+          const myId = getCurrentUserId();
+          const isUserAMe = users[0]?.id === myId;
+          const myColor    = (typeof window !== "undefined" ? localStorage.getItem("alien_my_color")      : null) || "#BFEFE0";
+          const partColor  = (typeof window !== "undefined" ? localStorage.getItem("alien_partner_color") : null) || "#FFD6E8";
+          const colorA = isUserAMe ? myColor : partColor;
+          const colorB = isUserAMe ? partColor : myColor;
 
           // 좌표계: 컨테이너 300px, 지구 100px (bottom:-18 → 82px 보임)
           const CONTAINER_H = 300;
@@ -748,7 +752,7 @@ const getPercent = (owner: string) => {
               {/* 우주 배경 */}
               <div style={{
                 position: "relative", height: CONTAINER_H,
-                background: "linear-gradient(180deg, #020010 0%, #0B0330 28%, #160840 55%, #0E2060 100%)",
+                background: "linear-gradient(180deg, #2A1258 0%, #4422A0 32%, #6B35CC 62%, #2244A8 100%)",
                 borderRadius: 18, overflow: "hidden", marginTop: 14, marginBottom: 12,
               }}>
 
@@ -817,7 +821,7 @@ const getPercent = (owner: string) => {
                   }}>
                     {/* 좌 불꽃 — userA (프로필 색상) */}
                     <div style={{
-                      flex: expRatioA,
+                      flex: Math.max(expRatioA, 0.15),
                       height: flameBaseH + expRatioA * flameMaxAdd,
                       background: `linear-gradient(180deg,${colorA}ee,${colorA} 45%,${colorA}aa)`,
                       borderRadius: "50% 20% 50% 60%",
@@ -828,7 +832,7 @@ const getPercent = (owner: string) => {
                     }} />
                     {/* 우 불꽃 — userB (프로필 색상) */}
                     <div style={{
-                      flex: expRatioB,
+                      flex: Math.max(expRatioB, 0.15),
                       height: flameBaseH + expRatioB * flameMaxAdd,
                       background: `linear-gradient(180deg,${colorB}ee,${colorB} 45%,${colorB}aa)`,
                       borderRadius: "20% 50% 60% 50%",
