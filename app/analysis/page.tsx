@@ -718,8 +718,12 @@ const getPercent = (owner: string) => {
             return sum + Number(account.balance || 0);
           }, 0);
 
-          const GOAL = 1_000_000_000; // 10억
+          const GOAL = 500_000_000; // 5억
           const progress = Math.min(Math.max(totalAssets / GOAL, 0), 1);
+
+          // 프로필 색상 (localStorage)
+          const colorA = (typeof window !== "undefined" ? localStorage.getItem("alien_my_color") : null) || "#BFEFE0";
+          const colorB = (typeof window !== "undefined" ? localStorage.getItem("alien_partner_color") : null) || "#FFD6E8";
 
           // 좌표계: 컨테이너 300px, 지구 100px (bottom:-18 → 82px 보임)
           const CONTAINER_H = 300;
@@ -762,18 +766,11 @@ const getPercent = (owner: string) => {
                   }} />
                 ))}
 
-                {/* 궤도 점선: 로켓 A (30%) */}
+                {/* 궤도 점선: 중앙 */}
                 <div style={{
-                  position: "absolute", left: "30%", top: 12,
+                  position: "absolute", left: "50%", top: 12,
                   bottom: ROCKET_MIN + 4, width: 0,
-                  borderLeft: "1.5px dashed rgba(176,130,255,0.25)",
-                  transform: "translateX(-50%)", zIndex: 1,
-                }} />
-                {/* 궤도 점선: 로켓 B (70%) */}
-                <div style={{
-                  position: "absolute", left: "70%", top: 12,
-                  bottom: ROCKET_MIN + 4, width: 0,
-                  borderLeft: "1.5px dashed rgba(255,160,200,0.25)",
+                  borderLeft: "1.5px dashed rgba(200,170,255,0.28)",
                   transform: "translateX(-50%)", zIndex: 1,
                 }} />
 
@@ -802,69 +799,61 @@ const getPercent = (owner: string) => {
                   );
                 })}
 
-                {/* 로켓 A */}
+                {/* 로켓 (단일 — 중앙) */}
                 <div style={{
-                  position: "absolute", left: "30%",
+                  position: "absolute", left: "50%",
                   bottom: rocketBottom,
                   transform: "translateX(-50%)",
                   transition: "bottom 1.4s cubic-bezier(0.34,1.56,0.64,1)",
                   textAlign: "center", zIndex: 5,
                   animation: "rocketFloat 2.2s ease-in-out infinite",
                 }}>
-                  <div style={{ fontSize: 24 }}>🚀</div>
+                  <div style={{ fontSize: 26 }}>🚀</div>
+                  {/* 2색 불꽃: 좌(userA) 보라 / 우(userB) 핑크 */}
                   <div style={{
                     margin: "2px auto 0",
-                    width: 8 + expRatioA * 9,
-                    height: flameBaseH + expRatioA * flameMaxAdd,
-                    background: "linear-gradient(180deg,#FFE033,#FF8800 40%,#FF3300)",
-                    borderRadius: "40% 40% 60% 60%",
-                    animation: "flameFlicker 0.15s ease-in-out infinite",
-                    filter: "blur(1.5px)", opacity: 0.95,
-                    transition: "all 1s ease",
-                  }} />
+                    display: "flex", alignItems: "flex-end",
+                    width: 22, transition: "all 1s ease",
+                  }}>
+                    {/* 좌 불꽃 — userA (프로필 색상) */}
+                    <div style={{
+                      flex: expRatioA,
+                      height: flameBaseH + expRatioA * flameMaxAdd,
+                      background: `linear-gradient(180deg,${colorA}ee,${colorA} 45%,${colorA}aa)`,
+                      borderRadius: "50% 20% 50% 60%",
+                      animation: "flameFlicker 0.15s ease-in-out infinite",
+                      filter: "blur(1.5px)", opacity: 0.95,
+                      transition: "all 1s ease",
+                      boxShadow: `0 0 8px ${colorA}88`,
+                    }} />
+                    {/* 우 불꽃 — userB (프로필 색상) */}
+                    <div style={{
+                      flex: expRatioB,
+                      height: flameBaseH + expRatioB * flameMaxAdd,
+                      background: `linear-gradient(180deg,${colorB}ee,${colorB} 45%,${colorB}aa)`,
+                      borderRadius: "20% 50% 60% 50%",
+                      animation: "flameFlicker 0.15s ease-in-out infinite",
+                      animationDelay: "0.08s",
+                      filter: "blur(1.5px)", opacity: 0.95,
+                      transition: "all 1s ease",
+                      boxShadow: `0 0 8px ${colorB}88`,
+                    }} />
+                  </div>
                 </div>
-                {/* 이름 A (로켓 아래) */}
+                {/* 이름 라벨 (로켓 아래) */}
                 <div style={{
-                  position: "absolute", left: "30%",
-                  bottom: rocketBottom - 18,
+                  position: "absolute", left: "50%",
+                  bottom: rocketBottom - 20,
                   transform: "translateX(-50%)",
                   transition: "bottom 1.4s cubic-bezier(0.34,1.56,0.64,1)",
-                  fontSize: 9, color: "#D4BCFF", fontWeight: 900,
-                  textShadow: "0 1px 4px rgba(0,0,0,0.7)", zIndex: 6,
-                }}>{userA}</div>
-
-                {/* 로켓 B */}
-                <div style={{
-                  position: "absolute", left: "70%",
-                  bottom: rocketBottom,
-                  transform: "translateX(-50%)",
-                  transition: "bottom 1.4s cubic-bezier(0.34,1.56,0.64,1)",
-                  textAlign: "center", zIndex: 5,
-                  animation: "rocketFloat 2.5s ease-in-out infinite",
-                  animationDelay: "0.5s",
+                  display: "flex", gap: 4, alignItems: "center",
+                  fontSize: 8.5, fontWeight: 900, zIndex: 6,
+                  textShadow: "0 1px 4px rgba(0,0,0,0.7)", whiteSpace: "nowrap",
                 }}>
-                  <div style={{ fontSize: 24 }}>🚀</div>
-                  <div style={{
-                    margin: "2px auto 0",
-                    width: 8 + expRatioB * 9,
-                    height: flameBaseH + expRatioB * flameMaxAdd,
-                    background: "linear-gradient(180deg,#FFE033,#FF8800 40%,#FF3300)",
-                    borderRadius: "40% 40% 60% 60%",
-                    animation: "flameFlicker 0.15s ease-in-out infinite",
-                    animationDelay: "0.08s",
-                    filter: "blur(1.5px)", opacity: 0.95,
-                    transition: "all 1s ease",
-                  }} />
+                  <span style={{ color: "#D4BCFF" }}>{userA}</span>
+                  <span style={{ color: "rgba(255,255,255,0.4)" }}>💜</span>
+                  <span style={{ color: "#FFD0EE" }}>{userB}</span>
                 </div>
-                {/* 이름 B (로켓 아래) */}
-                <div style={{
-                  position: "absolute", left: "70%",
-                  bottom: rocketBottom - 18,
-                  transform: "translateX(-50%)",
-                  transition: "bottom 1.4s cubic-bezier(0.34,1.56,0.64,1)",
-                  fontSize: 9, color: "#FFD0EE", fontWeight: 900,
-                  textShadow: "0 1px 4px rgba(0,0,0,0.7)", zIndex: 6,
-                }}>{userB}</div>
 
                 {/* 지구 (출발점 — 하단 중앙, 명확히 보임) */}
                 <div style={{
@@ -911,7 +900,7 @@ const getPercent = (owner: string) => {
                       ? `${(totalAssets / 100_000_000).toFixed(1)}억`
                       : `${Math.round(totalAssets / 10_000).toLocaleString()}만`}원
                   </strong></span>
-                  <span>목표 <strong style={{ color: "#FF6B9D" }}>10억</strong></span>
+                  <span>목표 <strong style={{ color: "#FF6B9D" }}>5억</strong></span>
                 </div>
                 <div style={{ height: 6, background: "#EDE6F9", borderRadius: 999, overflow: "hidden" }}>
                   <div style={{
