@@ -350,25 +350,31 @@ function TransactionsContent() {
     });
   }, [transactions, filterType, viewMode, dayRange, monthRange, selectedType, selectedAccountId, customRange]);
 
-  // ALL 뷰에서 사용 중인 EXPENSE 카테고리 목록 (실제 데이터 기준)
+  // LIST 뷰에서 현재 필터 타입 기준 카테고리 목록 (실제 데이터 기준)
   const expenseCategoriesInView = useMemo(() => {
-    if (filterType !== "ALL" || viewMode !== "LIST") return [];
+    if (viewMode !== "LIST") return [];
     const cats = new Set<string>();
     filteredTransactions.forEach((tx: any) => {
-      if (tx.type === "EXPENSE" && tx.category) cats.add(tx.category);
+      // ALL이면 EXPENSE만, 특정 타입이면 해당 타입만
+      const typeMatch = filterType === "ALL" ? tx.type === "EXPENSE"
+        : filterType === "INCOME" ? tx.type === "INCOME"
+        : filterType === "EXPENSE" ? tx.type === "EXPENSE"
+        : filterType === "TRANSFER" ? tx.type === "TRANSFER"
+        : false;
+      if (typeMatch && tx.category) cats.add(tx.category);
     });
     return Array.from(cats).sort();
   }, [filteredTransactions, filterType, viewMode]);
 
   // 카테고리 필터 적용된 최종 목록
   const displayedTransactions = useMemo(() => {
-    if (filterType !== "ALL" || viewMode !== "LIST" || categoryFilter === "전체") {
+    if (viewMode !== "LIST" || categoryFilter === "전체") {
       return filteredTransactions;
     }
     return filteredTransactions.filter((tx: any) =>
-      tx.type === "EXPENSE" && (tx.category || "기타") === categoryFilter
+      (tx.category || "기타") === categoryFilter
     );
-  }, [filteredTransactions, filterType, viewMode, categoryFilter]);
+  }, [filteredTransactions, viewMode, categoryFilter]);
 
   const calendarDays = useMemo(() => {
     const days: (Date | null)[] = [];
@@ -769,7 +775,7 @@ function TransactionsContent() {
           {/* 건수 레이블 + 카테고리 필터 (ALL + LIST 전용) */}
           {viewMode === "LIST" && (
             <div>
-              {filterType === "ALL" && expenseCategoriesInView.length > 0 && (
+              {expenseCategoriesInView.length > 0 && (
                 <div style={{
                   display: "flex", alignItems: "center", gap: 6,
                   overflowX: "auto", paddingBottom: 4,
@@ -798,9 +804,9 @@ function TransactionsContent() {
                   })}
                 </div>
               )}
-              <div style={{ fontSize: 12, fontWeight: 800, color: "#B0A8C8", paddingLeft: 2, marginTop: filterType === "ALL" && expenseCategoriesInView.length > 0 ? 6 : 0 }}>
-                {filterType === "ALL"
-                  ? (categoryFilter === "전체" ? "전체" : categoryFilter)
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#B0A8C8", paddingLeft: 2, marginTop: expenseCategoriesInView.length > 0 ? 6 : 0 }}>
+                {categoryFilter !== "전체" ? categoryFilter
+                  : filterType === "ALL" ? "전체"
                   : filterType === "INCOME" ? "수입"
                   : filterType === "EXPENSE" ? "지출"
                   : "이체"} {displayedTransactions.length}건
