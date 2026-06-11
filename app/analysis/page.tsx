@@ -60,6 +60,8 @@ import {
   Banknote,
   Store,
   ShoppingCart,
+  Filter,
+  Layers,
 } from "lucide-react";
 import { useModalBack } from "@/components/lib/BackStackContext";
 
@@ -247,6 +249,11 @@ function AnalysisPageContent() {
   const [selectedTrendCategory, setSelectedTrendCategory] = useState<string | null>(null);
   const [includeDebt, setIncludeDebt] = useState(true);
   const [showBudgetInTrend, setShowBudgetInTrend] = useState(false);
+  const [budgetCatsOnlyInTrend, setBudgetCatsOnlyInTrend] = useState(false);
+  // 월별 지출 추이 카테고리 필터
+  const [showMonthlyChartPanel, setShowMonthlyChartPanel] = useState(false);
+  const [monthlyChartSelectedCats, setMonthlyChartSelectedCats] = useState<string[]>([]);
+  const [monthlyChartMode, setMonthlyChartMode] = useState<"all" | "category">("all");
   const [spendingMonth, setSpendingMonth] = useState<Date | null>(null); // null = 현재 월
   const [budgets, setBudgets] = useState<Record<string, number>>({});
     
@@ -308,7 +315,7 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
     const familyId = getCurrentFamilyId();
     const familyCode = getCurrentFamilyCode();
 
-    // 5개 요청을 동시에 병렬 실행 → 응답속도 대폭 개선
+    // 6개 요청을 동시에 병렬 실행 → 응답속도 대폭 개선
     Promise.all([
       fetch(`/api/transactions?familyId=${familyId}`).then(r => r.json()),
       fetch(`/api/profile?code=${encodeURIComponent(familyCode)}`).then(r => r.json()),
@@ -316,10 +323,7 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
       fetch(`/api/categories?familyId=${familyId}&type=EXPENSE`).then(r => r.json()),
       fetch(`/api/categories?familyId=${familyId}&type=INCOME`).then(r => r.json()),
       fetch(`/api/family-settings?familyId=${familyId}`).then(r => r.json()),
-    ]).then(([txData, profileData, accountData, expCats, incCats, settingsData]) => {
-      // 거래내역
-      setTransactions(txData || []);
-
+    ]).then(async ([txData, profileData, accountData, expCats, incCats, settingsData]) => {
       // 프로필(유저 목록)
       const myId = getCurrentUserId();
       const savedMyName = localStorage.getItem("alien_my_name") || "나";
@@ -330,56 +334,54 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
         }
         return { ...user };
       });
-      setUsers([...mappedUsers, { id: 0, name: "공동" }]);
 
       // 계좌 목록
       const accountList = Array.isArray(accountData) ? accountData : accountData.accounts || [];
       const sorted = accountList
         .slice()
         .sort((a: Account, b: Account) => (a.displayOrder || 0) - (b.displayOrder || 0));
-      setAccounts(sorted);
 
-      // 주식계좌 현 평가액(총평가 = 주식 + 예수금) 조회
+      // 주식계좌 현 평가액 — 메인 로드와 동시에 대기 (로켓 금액 즉시 반영)
       const stockAccounts = sorted.filter((a: Account) => a.type === "STOCK");
+      const stockMap: Record<number, number> = {};
       if (stockAccounts.length > 0) {
-        Promise.all(
+        const results = await Promise.all(
           stockAccounts.map((a: Account) =>
             fetch(`/api/stocks/summary?accountId=${a.id}`)
               .then((r) => r.json())
               .then((d) => ({ id: a.id, totalValue: Number(d.totalValue || 0) }))
               .catch(() => ({ id: a.id, totalValue: Number(a.stockCash || a.balance || 0) }))
           )
-        ).then((results) => {
-          const map: Record<number, number> = {};
-          results.forEach(({ id, totalValue }) => { map[id] = totalValue; });
-          setStockMarketValues(map);
-        });
+        );
+        results.forEach(({ id, totalValue }) => { stockMap[id] = totalValue; });
       }
 
       // 카테고리 아이콘 맵
       const all = [...(Array.isArray(expCats) ? expCats : []), ...(Array.isArray(incCats) ? incCats : [])];
       const iconMap: Record<string, string> = {};
       all.forEach((cat: any) => { if (cat.name && cat.icon) iconMap[cat.name] = cat.icon; });
-      setDbCategoryIconMap(iconMap);
 
       // 예산 데이터: DB 우선, 없으면 localStorage 캐시
+      let budgetMap: Record<string, number> = {};
       if (settingsData && settingsData.budgets && typeof settingsData.budgets === "object") {
-        const budgetMap: Record<string, number> = {};
         for (const [k, v] of Object.entries(settingsData.budgets)) {
           budgetMap[k] = Number(v) || 0;
         }
-        setBudgets(budgetMap);
-        // localStorage 캐시 갱신
         localStorage.setItem("alien_category_budgets", JSON.stringify(budgetMap));
       } else {
-        // DB에 없으면 localStorage 캐시 사용
         try {
           const cached = JSON.parse(localStorage.getItem("alien_category_budgets") || "{}");
-          const budgetMap: Record<string, number> = {};
           for (const [k, v] of Object.entries(cached)) budgetMap[k] = Number(v) || 0;
-          setBudgets(budgetMap);
         } catch { /* ignore */ }
       }
+
+      // 모든 state를 한번에 업데이트 (React 18 자동 배치 → 단일 리렌더)
+      setTransactions(txData || []);
+      setUsers([...mappedUsers, { id: 0, name: "공동" }]);
+      setAccounts(sorted);
+      setStockMarketValues(stockMap);
+      setDbCategoryIconMap(iconMap);
+      setBudgets(budgetMap);
     }).catch(console.error);
   }, []);
 
@@ -484,6 +486,9 @@ const getPercent = (owner: string) => {
     })
     .sort((a, b) => b.usageRate - a.usageRate);
 
+  // 예산이 설정된 카테고리만 표시
+  const budgetedCategories = topCategories.filter(c => c.budget > 0);
+
   const recentMonths = Array.from({ length: 5 }, (_, i) => {
     const base = new Date(
       baseMonth.getFullYear(),
@@ -515,8 +520,24 @@ const getPercent = (owner: string) => {
       expense: monthTxs
         .filter((tx) => tx.type === "EXPENSE")
         .reduce((sum, tx) => sum + tx.amount, 0),
+      categoryExpense: (cats: string[]) =>
+        cats.length === 0 ? 0 : monthTxs
+          .filter((tx) => tx.type === "EXPENSE" && cats.includes(tx.category || "기타"))
+          .reduce((sum, tx) => sum + tx.amount, 0),
     };
   });
+
+  // 최근 5개월 지출 카테고리 목록 (카테고리 픽커용)
+  const recentExpenseCategories = Array.from(
+    new Set(
+      transactions
+        .filter((tx) => {
+          const inRange = recentMonths.some(m => isDateInRange(tx.transactionAt, m.range.start, m.range.end));
+          return tx.type === "EXPENSE" && inRange;
+        })
+        .map((tx) => tx.category || "기타")
+    )
+  ).sort();
 
   return (
     <>
@@ -525,8 +546,8 @@ const getPercent = (owner: string) => {
           <div>
             <strong style={{ fontSize: 14 }}>예산 대비 사용률</strong>
             {(() => {
-              const totalBudget = topCategories.reduce((s, c) => s + c.budget, 0);
-              const totalUsed = topCategories.reduce((s, c) => s + c.amount, 0);
+              const totalBudget = budgetedCategories.reduce((s, c) => s + c.budget, 0);
+              const totalUsed = budgetedCategories.reduce((s, c) => s + c.amount, 0);
               if (totalBudget === 0) return null;
               return (
                 <div style={{ fontSize: 11, color: theme.colors.subtext, marginTop: 2 }}>
@@ -559,14 +580,14 @@ const getPercent = (owner: string) => {
           </div>
         </div>
 
-        {topCategories.length === 0 ? (
+        {budgetedCategories.length === 0 ? (
           <div style={emptyDonutWrapStyle}>
             <div style={donutEmptyStyle} />
-            <span style={smallSubTextStyle}>소비 데이터가 없습니다.</span>
+            <span style={smallSubTextStyle}>예산이 설정된 카테고리가 없습니다.</span>
           </div>
         ) : (
           <div style={budgetUsageListStyle}>
-            {topCategories.map((item) => {
+            {budgetedCategories.map((item) => {
               const name = item.name;
               // 1st: match by category name in built-in Korean map
               let iconData = categoryIconMap.find(m => m.key === name) || null;
@@ -610,14 +631,88 @@ const getPercent = (owner: string) => {
       </section>
 
       <section style={cardStyle}>
-        <strong style={{ fontSize: 14 }}>월별 지출 추이</strong>
+        {/* 헤더 */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <strong style={{ fontSize: 14 }}>월별 지출 추이</strong>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            {/* 카테고리 아이콘 */}
+            <button
+              type="button"
+              onClick={() => setShowMonthlyChartPanel(v => !v)}
+              style={{
+                display: "flex", alignItems: "center", gap: 3,
+                height: 28, padding: "0 9px", borderRadius: 999, border: "none",
+                background: showMonthlyChartPanel ? `${theme.colors.primary}18` : "#F4F0FF",
+                color: showMonthlyChartPanel ? theme.colors.primary : "#8B7BAB",
+                fontSize: 11, fontWeight: 800, cursor: "pointer",
+              }}
+            >
+              <Filter size={11} />
+              {monthlyChartSelectedCats.length > 0 ? `${monthlyChartSelectedCats.length}개` : "카테고리"}
+            </button>
+            {/* 전체/카테고리 토글 */}
+            <button
+              type="button"
+              onClick={() => setMonthlyChartMode(v => v === "all" ? "category" : "all")}
+              style={{
+                display: "flex", alignItems: "center", gap: 3,
+                height: 28, padding: "0 9px", borderRadius: 999, border: "none",
+                background: monthlyChartMode === "category" ? `${theme.colors.primary}18` : "#F4F0FF",
+                color: monthlyChartMode === "category" ? theme.colors.primary : "#8B7BAB",
+                fontSize: 11, fontWeight: 800, cursor: "pointer",
+              }}
+            >
+              <Layers size={11} />
+              {monthlyChartMode === "category" ? "카테고리별" : "전체"}
+            </button>
+          </div>
+        </div>
+
+        {/* 카테고리 픽커 패널 */}
+        {showMonthlyChartPanel && (
+          <div style={{ background: "#F9F7FF", borderRadius: 14, padding: "10px 12px", marginBottom: 10 }}>
+            <div style={{ fontSize: 10, fontWeight: 900, color: "#8B7BAB", marginBottom: 6 }}>표시할 카테고리 선택</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {recentExpenseCategories.map(cat => {
+                const active = monthlyChartSelectedCats.includes(cat);
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setMonthlyChartSelectedCats(prev =>
+                      active ? prev.filter(c => c !== cat) : [...prev, cat]
+                    )}
+                    style={{
+                      height: 26, padding: "0 10px", borderRadius: 999, fontSize: 10, fontWeight: 800, cursor: "pointer",
+                      border: active ? `1.5px solid ${theme.colors.primary}` : "1.5px solid #E8E1F5",
+                      background: active ? `${theme.colors.primary}18` : "white",
+                      color: active ? theme.colors.primary : "#B0A8C8",
+                    }}
+                  >{cat}</button>
+                );
+              })}
+            </div>
+            {monthlyChartSelectedCats.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setMonthlyChartSelectedCats([])}
+                style={{ marginTop: 6, fontSize: 10, color: "#FF6B81", background: "none", border: "none", cursor: "pointer", fontWeight: 700 }}
+              >전체 해제</button>
+            )}
+          </div>
+        )}
 
         <div style={dualChartStyle}>
           {monthlySummary.map((item) => {
-            const total = item.income + item.expense;
+            const isCatMode = monthlyChartMode === "category" && monthlyChartSelectedCats.length > 0;
+            const catAmt = isCatMode ? item.categoryExpense(monthlyChartSelectedCats) : 0;
+            const total = isCatMode
+              ? monthlySummary.reduce((mx, m) => Math.max(mx, m.categoryExpense(monthlyChartSelectedCats)), 1)
+              : item.income + item.expense;
 
-            const incomeRatio = total ? item.income / total : 0;
-            const expenseRatio = total ? item.expense / total : 0;
+            const incomeRatio = !isCatMode && total ? item.income / total : 0;
+            const expenseRatio = !isCatMode && total ? item.expense / total : 0;
+            const catRatio = isCatMode ? catAmt / total : 0;
 
             return (
               <button
@@ -627,25 +722,19 @@ const getPercent = (owner: string) => {
                   setSelectedMonthSummary({
                     label: `${item.label} (${item.rangeLabel})`,
                     income: item.income,
-                    expense: item.expense,
+                    expense: isCatMode ? catAmt : item.expense,
                   })
                 }
                 style={dualBarGroupStyle}
               >
-                <div
-                  style={{
-                    ...dualBarStyle,
-                    height: Math.max(6, incomeRatio * 90),
-                    background: "#DDFBEF",
-                  }}
-                />
-                <div
-                  style={{
-                    ...dualBarStyle,
-                    height: Math.max(6, expenseRatio * 90),
-                    background: "#FFE8F0",
-                  }}
-                />
+                {isCatMode ? (
+                  <div style={{ ...dualBarStyle, height: Math.max(6, catRatio * 90), background: "#E8E0FF" }} />
+                ) : (
+                  <>
+                    <div style={{ ...dualBarStyle, height: Math.max(6, incomeRatio * 90), background: "#DDFBEF" }} />
+                    <div style={{ ...dualBarStyle, height: Math.max(6, expenseRatio * 90), background: "#FFE8F0" }} />
+                  </>
+                )}
               </button>
             );
           })}
@@ -657,6 +746,19 @@ const getPercent = (owner: string) => {
           ))}
         </div>
 
+        {/* 범례 */}
+        {monthlyChartMode === "all" && (
+          <div style={{ display: "flex", gap: 12, marginTop: 4, fontSize: 10, color: "#8B7BAB" }}>
+            <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "#DDFBEF", border: "1px solid #10B981", marginRight: 3 }} />수입</span>
+            <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "#FFE8F0", border: "1px solid #FF6B81", marginRight: 3 }} />지출</span>
+          </div>
+        )}
+        {monthlyChartMode === "category" && monthlyChartSelectedCats.length > 0 && (
+          <div style={{ fontSize: 10, color: theme.colors.primary, marginTop: 4, fontWeight: 700 }}>
+            📊 {monthlyChartSelectedCats.join(", ")} 월별 지출
+          </div>
+        )}
+
         {selectedMonthSummary && (
           <div style={monthSummaryBoxStyle}>
             <strong style={{ fontSize: 13 }}>
@@ -664,15 +766,17 @@ const getPercent = (owner: string) => {
             </strong>
 
             <div style={monthSummaryGridStyle}>
-              <div style={incomeSummaryCardStyle}>
-                <span style={summaryLabelStyle}>수입</span>
-                <strong style={{ color: theme.colors.income }}>
-                  +{selectedMonthSummary.income.toLocaleString()}원
-                </strong>
-              </div>
+              {monthlyChartMode === "all" && (
+                <div style={incomeSummaryCardStyle}>
+                  <span style={summaryLabelStyle}>수입</span>
+                  <strong style={{ color: theme.colors.income }}>
+                    +{selectedMonthSummary.income.toLocaleString()}원
+                  </strong>
+                </div>
+              )}
 
-              <div style={expenseSummaryCardStyle}>
-                <span style={summaryLabelStyle}>지출</span>
+              <div style={{ ...expenseSummaryCardStyle, gridColumn: monthlyChartMode === "category" ? "1 / -1" : "auto" }}>
+                <span style={summaryLabelStyle}>{monthlyChartMode === "category" ? "선택 카테고리 지출" : "지출"}</span>
                 <strong style={{ color: theme.colors.expense }}>
                   -{selectedMonthSummary.expense.toLocaleString()}원
                 </strong>
@@ -1187,13 +1291,18 @@ const trendTargetTransactions = currentMonthExpenses;
 const trendCategoryMap = getCategoryTotal(trendTargetTransactions);
 const trendTotal = Object.values(trendCategoryMap).reduce((s, v) => s + v, 0);
 
-const trendCategories = Object.entries(trendCategoryMap)
+const trendCategoriesAll = Object.entries(trendCategoryMap)
   .sort((a, b) => b[1] - a[1])
   .map(([name, amount]) => ({
     name,
     amount,
     percent: trendTotal > 0 ? Math.round((amount / trendTotal) * 100) : 0,
   }));
+
+// 예산카테고리만 보기 토글 적용
+const trendCategories = budgetCatsOnlyInTrend
+  ? trendCategoriesAll.filter(c => (budgets[c.name] || 0) > 0)
+  : trendCategoriesAll;
 
 // 선택된 카테고리의 해당 월 거래내역
 const selectedCategoryTransactions = selectedTrendCategory
@@ -1276,8 +1385,22 @@ const lastMonthExpenses = expenses.filter((tx) =>
 
   <div style={spendingHeaderStyle}>
     <strong style={{ fontSize: 14 }}>소비 비중</strong>
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <span style={smallSubTextStyle}>지출 카테고리별</span>
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      {/* 예산 설정된 카테고리만 보기 토글 */}
+      <button
+        type="button"
+        onClick={() => setBudgetCatsOnlyInTrend(v => !v)}
+        style={{
+          fontSize: 10, fontWeight: 800, cursor: "pointer",
+          border: `1.5px solid ${budgetCatsOnlyInTrend ? "#10B981" : "#E8E1F5"}`,
+          background: budgetCatsOnlyInTrend ? "#ECFFF6" : "#FAFAFF",
+          color: budgetCatsOnlyInTrend ? "#10B981" : "#A59DBD",
+          borderRadius: 999, padding: "3px 8px",
+        }}
+      >
+        예산만 {budgetCatsOnlyInTrend ? "ON" : "OFF"}
+      </button>
+      {/* 예산대비 수치 표시 토글 */}
       <button
         type="button"
         onClick={() => setShowBudgetInTrend(v => !v)}

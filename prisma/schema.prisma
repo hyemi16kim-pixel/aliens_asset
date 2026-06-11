@@ -148,7 +148,7 @@ model Goal {
   familyId      Int
   userId        Int?
   title         String
-  
+
   targetAmount  Int
   currentAmount Int        @default(0)
   status        GoalStatus @default(ACTIVE)
@@ -160,8 +160,23 @@ model Goal {
   isPinned   Boolean  @default(false)
 
 
-  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
-  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  family    Family        @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user      User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  histories GoalHistory[]
+}
+
+model GoalHistory {
+  id           Int      @id @default(autoincrement())
+  goalId       Int
+  prevAmount   Int
+  newAmount    Int
+  changeAmount Int
+  memo         String?
+  createdAt    DateTime @default(now())
+
+  goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([goalId])
 }
 
 model StockHolding {

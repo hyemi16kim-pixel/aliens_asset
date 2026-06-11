@@ -7,7 +7,7 @@ import { useSwipeNav } from "@/components/lib/useSwipeNav";
 import BottomNav from "@/components/navigation/BottomNav";
 import { theme } from "@/components/lib/theme";
 import { getCurrentFamilyId, getCurrentUserId } from "@/components/lib/familyCode";
-import { ChevronLeft, Plus, X, Trash2 } from "lucide-react";
+import { ChevronLeft, Plus, X, Trash2, List } from "lucide-react";
 import { useModalBack } from "@/components/lib/BackStackContext";
 
 type Goal = {
@@ -19,6 +19,16 @@ type Goal = {
   dueDate?: string | null;
   currentAmount: number;
   targetAmount: number;
+};
+
+type GoalHistoryEntry = {
+  id: number;
+  goalId: number;
+  prevAmount: number;
+  newAmount: number;
+  changeAmount: number;
+  memo?: string | null;
+  createdAt: string;
 };
 
 const ICONS = ["✈️", "🏡", "🛸", "💍", "🚗", "🎓", "💰", "💳", "📉", "🏦"];
@@ -108,9 +118,14 @@ export default function GoalsPage() {
   const [targetAmount, setTargetAmount] = useState("");
   const [debtTotal, setDebtTotal] = useState("");
   const [debtRemaining, setDebtRemaining] = useState("");
+  const [changeMemo, setChangeMemo] = useState("");
 
   const [showCalc, setShowCalc] = useState<"current" | "target" | "debtRemaining" | null>(null);
 
+  // 내역 관련 state
+  const [historyGoalId, setHistoryGoalId] = useState<number | null>(null);
+  const [goalHistories, setGoalHistories] = useState<Record<number, GoalHistoryEntry[]>>({});
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useModalBack(isOpen && showCalc !== null, () => setShowCalc(null));
   useModalBack(isOpen, () => closeModal());
@@ -130,6 +145,7 @@ export default function GoalsPage() {
     setGoalType("SAVING");
     setTitle(""); setPeriodType("ALWAYS"); setDueDate(""); setIcon("🛸");
     setCurrentAmount(""); setTargetAmount(""); setDebtTotal(""); setDebtRemaining("");
+    setChangeMemo("");
     setShowCalc(null);
     setIsOpen(true);
   };
@@ -148,6 +164,7 @@ export default function GoalsPage() {
     setIcon(goal.icon || "🛸");
     setPeriodType(goal.periodType || "ALWAYS");
     setDueDate(goal.dueDate ? new Date(goal.dueDate).toISOString().split("T")[0] : "");
+    setChangeMemo("");
     if (isDebtGoal(goal)) {
       setGoalType("DEBT");
       setDebtTotal(String(Math.abs(goal.targetAmount)));
@@ -163,7 +180,26 @@ export default function GoalsPage() {
     setIsOpen(true);
   };
 
-  const closeModal = () => { setIsOpen(false); setSelectedGoal(null); setShowCalc(null); };
+  const closeModal = () => { setIsOpen(false); setSelectedGoal(null); setShowCalc(null); setChangeMemo(""); };
+
+  const toggleHistory = async (goalId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (historyGoalId === goalId) {
+      setHistoryGoalId(null);
+      return;
+    }
+    setHistoryGoalId(goalId);
+    if (!goalHistories[goalId]) {
+      setHistoryLoading(true);
+      try {
+        const res = await fetch(`/api/goals/history?goalId=${goalId}`);
+        const data = await res.json();
+        setGoalHistories(prev => ({ ...prev, [goalId]: data || [] }));
+      } catch { /* ignore */ } finally {
+        setHistoryLoading(false);
+      }
+    }
+  };
 
   const saveGoal = async () => {
     if (!title) { alert("목표명을 입력하세요."); return; }
@@ -178,12 +214,34 @@ export default function GoalsPage() {
       finalTarget = Math.abs(Number(targetAmount));
       finalCurrent = Number(currentAmount || 0);
     }
+
     const method = selectedGoal ? "PATCH" : "POST";
     const body = selectedGoal
       ? { id: selectedGoal.id, title, icon, currentAmount: finalCurrent, targetAmount: finalTarget, periodType, dueDate: periodType === "LIMITED" ? dueDate : null }
       : { familyId: getCurrentFamilyId(), userId: getCurrentUserId() || null, title, icon, currentAmount: finalCurrent, targetAmount: finalTarget, periodType, dueDate: periodType === "LIMITED" ? dueDate : null };
     const res = await fetch("/api/goals", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) { const err = await res.json().catch(() => ({})); alert("저장 실패: " + (err.error || res.status)); return; }
+
+    // 기존 목표 수정이고 currentAmount가 변경됐을 때 내역 저장
+    if (selectedGoal) {
+      const prevAmount = selectedGoal.currentAmount;
+      if (finalCurrent !== prevAmount) {
+        await fetch("/api/goals/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            goalId: selectedGoal.id,
+            prevAmount,
+            newAmount: finalCurrent,
+            memo: changeMemo || null,
+          }),
+        }).catch(() => {/* 내역 저장 실패해도 목표는 저장됨 */});
+
+        // 캐시된 내역 초기화 (다음번 열 때 새로 로드)
+        setGoalHistories(prev => { const next = { ...prev }; delete next[selectedGoal.id]; return next; });
+      }
+    }
+
     closeModal();
     await loadGoals();
   };
@@ -211,6 +269,43 @@ export default function GoalsPage() {
   const debtGoals = goals.filter(g => isDebtGoal(g));
   const totalPercent = goals.length > 0 ? Math.round(goals.reduce((s, g) => s + calcPercent(g), 0) / goals.length) : 0;
   const money = (v: number) => `₩${Math.abs(Number(v || 0)).toLocaleString()}`;
+
+  const renderHistoryPanel = (goal: Goal) => {
+    if (historyGoalId !== goal.id) return null;
+    const entries = goalHistories[goal.id];
+    return (
+      <div style={{ background: "#F9F7FF", borderRadius: 16, padding: "12px 14px", marginTop: -8, border: "1px solid #EDE6F9", borderTopLeftRadius: 0, borderTopRightRadius: 0 }}>
+        <div style={{ fontSize: 11, fontWeight: 900, color: "#7C5CFF", marginBottom: 8 }}>📋 수정 내역</div>
+        {historyLoading ? (
+          <div style={{ fontSize: 12, color: "#B0A8C8", textAlign: "center", padding: "8px 0" }}>불러오는 중...</div>
+        ) : !entries || entries.length === 0 ? (
+          <div style={{ fontSize: 12, color: "#B0A8C8", textAlign: "center", padding: "8px 0" }}>수정 내역이 없습니다.</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {entries.map((h) => {
+              const isDebt = isDebtGoal(goal);
+              const delta = isDebt ? -h.changeAmount : h.changeAmount;
+              const plus = delta > 0;
+              return (
+                <div key={h.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "6px 0", borderBottom: "1px solid #EDE6F9" }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: plus ? "#10B981" : "#FF6B81" }}>
+                      {plus ? "+" : ""}{delta.toLocaleString()}원
+                    </div>
+                    {h.memo && <div style={{ fontSize: 10, color: "#8B7BAB", marginTop: 2 }}>{h.memo}</div>}
+                  </div>
+                  <div style={{ fontSize: 10, color: "#B0A8C8", textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
+                    <div>{new Date(h.createdAt).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })}</div>
+                    <div style={{ marginTop: 1 }}>₩{Math.abs(h.newAmount).toLocaleString()}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <main {...pageSwipe} style={pageStyle}>
@@ -241,7 +336,18 @@ export default function GoalsPage() {
           <>
             <div style={sectionLabelStyle}>💰 저축 목표</div>
             {savingGoals.map((goal) => (
-              <GoalCard key={goal.id} goal={goal} money={money} getDday={getDday} onClick={() => openEdit(goal)} onPin={(e) => togglePin(goal, e)} />
+              <div key={goal.id}>
+                <GoalCard
+                  goal={goal}
+                  money={money}
+                  getDday={getDday}
+                  onClick={() => openEdit(goal)}
+                  onPin={(e) => togglePin(goal, e)}
+                  onHistory={(e) => toggleHistory(goal.id, e)}
+                  historyOpen={historyGoalId === goal.id}
+                />
+                {renderHistoryPanel(goal)}
+              </div>
             ))}
           </>
         )}
@@ -250,7 +356,18 @@ export default function GoalsPage() {
           <>
             <div style={sectionLabelStyle}>📉 잔액 관리</div>
             {debtGoals.map((goal) => (
-              <GoalCard key={goal.id} goal={goal} money={money} getDday={getDday} onClick={() => openEdit(goal)} onPin={(e) => togglePin(goal, e)} />
+              <div key={goal.id}>
+                <GoalCard
+                  goal={goal}
+                  money={money}
+                  getDday={getDday}
+                  onClick={() => openEdit(goal)}
+                  onPin={(e) => togglePin(goal, e)}
+                  onHistory={(e) => toggleHistory(goal.id, e)}
+                  historyOpen={historyGoalId === goal.id}
+                />
+                {renderHistoryPanel(goal)}
+              </div>
             ))}
           </>
         )}
@@ -357,6 +474,19 @@ export default function GoalsPage() {
               </>
             )}
 
+            {/* 메모: 수정 시에만 표시 */}
+            {selectedGoal && (
+              <>
+                <label style={labelStyle}>수정 메모 (선택)</label>
+                <input
+                  value={changeMemo}
+                  onChange={(e) => setChangeMemo(e.target.value)}
+                  placeholder="예: 월급날 추가 저축"
+                  style={inputStyle}
+                />
+              </>
+            )}
+
             <label style={labelStyle}>기간</label>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               <button onClick={() => setPeriodType("ALWAYS")} style={{
@@ -395,9 +525,10 @@ export default function GoalsPage() {
   );
 }
 
-function GoalCard({ goal, money, getDday, onClick, onPin }: {
+function GoalCard({ goal, money, getDday, onClick, onPin, onHistory, historyOpen }: {
   goal: Goal; money: (v: number) => string; getDday: (g: Goal) => string;
   onClick: () => void; onPin: (e: React.MouseEvent) => void;
+  onHistory: (e: React.MouseEvent) => void; historyOpen: boolean;
 }) {
   const debt = isDebtGoal(goal);
   const percent = calcPercent(goal);
@@ -405,7 +536,10 @@ function GoalCard({ goal, money, getDday, onClick, onPin }: {
   const total = Math.abs(goal.targetAmount);
 
   return (
-    <section style={cardStyle} onClick={onClick}>
+    <section
+      style={{ ...cardStyle, borderBottomLeftRadius: historyOpen ? 0 : undefined, borderBottomRightRadius: historyOpen ? 0 : undefined }}
+      onClick={onClick}
+    >
       <div style={goalTopStyle}>
         <div style={{ ...iconBoxStyle, background: debt ? "#FFF0F4" : theme.colors.primarySoft }}>
           {goal.icon || "🛸"}
@@ -419,15 +553,31 @@ function GoalCard({ goal, money, getDday, onClick, onPin }: {
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
-          <button onClick={onPin} style={{
-            border: goal.isPinned ? "none" : `1px solid ${theme.colors.border}`,
-            background: goal.isPinned ? "linear-gradient(135deg, #7C5CFF, #A992FF)" : "transparent",
-            color: goal.isPinned ? "white" : theme.colors.subtext,
-            borderRadius: 999, padding: "2px 9px", fontSize: 10, fontWeight: 800,
-            cursor: "pointer", letterSpacing: 0.2, lineHeight: 1.6, whiteSpace: "nowrap",
-          }}>
-            {goal.isPinned ? "📌 홈 대표" : "+ 홈 고정"}
-          </button>
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            {/* 내역 리스트 아이콘 */}
+            <button
+              onClick={onHistory}
+              style={{
+                border: historyOpen ? `1px solid ${theme.colors.primary}` : `1px solid ${theme.colors.border}`,
+                background: historyOpen ? theme.colors.primarySoft : "transparent",
+                color: historyOpen ? theme.colors.primary : theme.colors.subtext,
+                borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 800,
+                cursor: "pointer", lineHeight: 1.6, display: "flex", alignItems: "center", gap: 3,
+              }}
+            >
+              <List size={11} />
+            </button>
+            {/* 홈 고정 버튼 */}
+            <button onClick={onPin} style={{
+              border: goal.isPinned ? "none" : `1px solid ${theme.colors.border}`,
+              background: goal.isPinned ? "linear-gradient(135deg, #7C5CFF, #A992FF)" : "transparent",
+              color: goal.isPinned ? "white" : theme.colors.subtext,
+              borderRadius: 999, padding: "2px 9px", fontSize: 10, fontWeight: 800,
+              cursor: "pointer", letterSpacing: 0.2, lineHeight: 1.6, whiteSpace: "nowrap",
+            }}>
+              {goal.isPinned ? "📌 홈 대표" : "+ 홈 고정"}
+            </button>
+          </div>
           <strong style={{ color: debt ? "#FF6B81" : theme.colors.primary }}>{percent}%</strong>
         </div>
       </div>
