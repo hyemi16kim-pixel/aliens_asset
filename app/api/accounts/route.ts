@@ -40,6 +40,8 @@ export async function GET(req: NextRequest) {
           nextEnd = new Date(year, month + 2, 0, 23, 59, 59);
         }
 
+        const now = new Date();
+
         const [thisTxs, nextTxs, thisPaidTxs, nextPaidTxs] = await Promise.all([
           prisma.transaction.findMany({
             where: { familyId, type: "EXPENSE", fromAccountId: account.id, transactionAt: { gte: thisStart, lte: thisEnd } },
@@ -47,12 +49,22 @@ export async function GET(req: NextRequest) {
           prisma.transaction.findMany({
             where: { familyId, type: "EXPENSE", fromAccountId: account.id, transactionAt: { gte: nextStart, lte: nextEnd } },
           }),
-          // 해당 사이클 기간 내 납부 이체 (선결제 카테고리 제외 - 다른 사이클 납부분 오염 방지)
+          // 납부액: 사이클 시작 ~ 오늘까지 모든 이체 포함 (사이클 마감 후 납부도 반영)
+          // "카드 이번달 선결제"는 다음달 분이므로 제외
           prisma.transaction.findMany({
-            where: { familyId, type: "TRANSFER", toAccountId: account.id, transactionAt: { gte: thisStart, lte: thisEnd }, NOT: { category: { in: ["카드 전월 선결제", "카드 이번달 선결제"] } } },
+            where: {
+              familyId, type: "TRANSFER", toAccountId: account.id,
+              transactionAt: { gte: thisStart, lte: now },
+              NOT: { category: "카드 이번달 선결제" },
+            },
           }),
+          // 다음달 선결제: "카드 이번달 선결제" 카테고리로 명시된 이체만 (사이클 시작 이후)
           prisma.transaction.findMany({
-            where: { familyId, type: "TRANSFER", toAccountId: account.id, transactionAt: { gte: nextStart, lte: nextEnd }, NOT: { category: { in: ["카드 전월 선결제", "카드 이번달 선결제"] } } },
+            where: {
+              familyId, type: "TRANSFER", toAccountId: account.id,
+              category: "카드 이번달 선결제",
+              transactionAt: { gte: thisStart },
+            },
           }),
         ]);
 

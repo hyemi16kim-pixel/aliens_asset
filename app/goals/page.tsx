@@ -378,146 +378,155 @@ export default function GoalsPage() {
       {isOpen && (
         <div style={overlayStyle} onClick={closeModal}>
           <section style={modalStyle} onClick={(e) => e.stopPropagation()}>
+
+            {/* ── 고정 헤더 ── */}
             <div style={modalHeaderStyle}>
               <strong>{selectedGoal ? "목표 수정" : "목표 추가"}</strong>
               <button onClick={closeModal} style={iconButtonStyle}><X size={18} /></button>
             </div>
 
-            <label style={labelStyle}>목표 유형</label>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <button onClick={() => setGoalType("SAVING")} style={{
-                height: 42, borderRadius: 14, fontWeight: 800, cursor: "pointer",
-                border: goalType === "SAVING" ? `1.5px solid ${theme.colors.primary}` : `1px solid ${theme.colors.border}`,
-                background: goalType === "SAVING" ? theme.colors.primarySoft : "white",
-                color: goalType === "SAVING" ? theme.colors.primary : theme.colors.text,
-              }}>💰 저축형</button>
-              <button onClick={() => setGoalType("DEBT")} style={{
-                height: 42, borderRadius: 14, fontWeight: 800, cursor: "pointer",
-                border: goalType === "DEBT" ? `1.5px solid #FF6B81` : `1px solid ${theme.colors.border}`,
-                background: goalType === "DEBT" ? "#FFF0F4" : "white",
-                color: goalType === "DEBT" ? "#FF6B81" : theme.colors.text,
-              }}>📉 잔액형</button>
-            </div>
-
-            {goalType === "DEBT" && (
-              <div style={{ padding: "8px 12px", borderRadius: 12, background: "#FFF7ED", border: "1px solid #FED7AA", marginTop: 8, fontSize: 11, color: "#F97316", fontWeight: 700 }}>
-                ₩{Number(debtTotal || 0).toLocaleString()} 에서 시작해 ₩0 까지 소진하는 목표
+            {/* ── 스크롤 영역 ── */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "0 2px" }}>
+              <label style={labelStyle}>목표 유형</label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <button onClick={() => setGoalType("SAVING")} style={{
+                  height: 42, borderRadius: 14, fontWeight: 800, cursor: "pointer",
+                  border: goalType === "SAVING" ? `1.5px solid ${theme.colors.primary}` : `1px solid ${theme.colors.border}`,
+                  background: goalType === "SAVING" ? theme.colors.primarySoft : "white",
+                  color: goalType === "SAVING" ? theme.colors.primary : theme.colors.text,
+                }}>💰 저축형</button>
+                <button onClick={() => setGoalType("DEBT")} style={{
+                  height: 42, borderRadius: 14, fontWeight: 800, cursor: "pointer",
+                  border: goalType === "DEBT" ? `1.5px solid #FF6B81` : `1px solid ${theme.colors.border}`,
+                  background: goalType === "DEBT" ? "#FFF0F4" : "white",
+                  color: goalType === "DEBT" ? "#FF6B81" : theme.colors.text,
+                }}>📉 잔액형</button>
               </div>
-            )}
 
-            <label style={labelStyle}>아이콘</label>
-            <div style={iconGridStyle}>
-              {ICONS.map((item) => (
-                <button key={item} onClick={() => setIcon(item)} style={{
-                  ...goalIconButtonStyle,
-                  border: icon === item ? `1px solid ${theme.colors.primary}` : `1px solid ${theme.colors.border}`,
-                  background: icon === item ? theme.colors.primarySoft : "white",
-                }}>{item}</button>
-              ))}
-            </div>
-
-            <label style={labelStyle}>목표명</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={goalType === "DEBT" ? "예: 여행 경비" : "예: 여행 자금"} style={inputStyle} />
-
-            {goalType === "SAVING" ? (
-              <>
-                <label style={labelStyle}>현재 금액</label>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input
-                    value={currentAmount ? Number(currentAmount).toLocaleString() : ""}
-                    onChange={(e) => setCurrentAmount(e.target.value.replace(/[^0-9]/g, ""))}
-                    placeholder="0"
-                    style={{ ...inputStyle, flex: 1 }}
-                  />
-                  <button type="button" onClick={() => setShowCalc(showCalc === "current" ? null : "current")} style={calcToggleBtn(showCalc === "current")}>🧮</button>
+              {goalType === "DEBT" && (
+                <div style={{ padding: "8px 12px", borderRadius: 12, background: "#FFF7ED", border: "1px solid #FED7AA", marginTop: 8, fontSize: 11, color: "#F97316", fontWeight: 700 }}>
+                  ₩{Number(debtTotal || 0).toLocaleString()} 에서 시작해 ₩0 까지 소진하는 목표
                 </div>
-                {showCalc === "current" && (
-                  <MiniCalc baseValue={currentAmount} onApply={(v) => { setCurrentAmount(v); setShowCalc(null); }} />
-                )}
-
-                <label style={labelStyle}>목표 금액</label>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input
-                    value={targetAmount ? Number(targetAmount).toLocaleString() : ""}
-                    onChange={(e) => setTargetAmount(e.target.value.replace(/[^0-9]/g, ""))}
-                    placeholder="2,000,000"
-                    style={{ ...inputStyle, flex: 1 }}
-                  />
-                  <button type="button" onClick={() => setShowCalc(showCalc === "target" ? null : "target")} style={calcToggleBtn(showCalc === "target")}>🧮</button>
-                </div>
-                {showCalc === "target" && (
-                  <MiniCalc baseValue={targetAmount} onApply={(v) => { setTargetAmount(v); setShowCalc(null); }} />
-                )}
-              </>
-            ) : (
-              <>
-                <label style={labelStyle}>초기 금액</label>
-                <input
-                  value={debtTotal ? Number(debtTotal).toLocaleString() : ""}
-                  onChange={(e) => setDebtTotal(e.target.value.replace(/[^0-9]/g, ""))}
-                  placeholder="10,000,000"
-                  style={{ ...inputStyle, border: "1px solid #FED7AA", color: "#F97316" }}
-                />
-                <label style={labelStyle}>현재 남은 금액</label>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input
-                    value={debtRemaining ? Number(debtRemaining).toLocaleString() : ""}
-                    onChange={(e) => setDebtRemaining(e.target.value.replace(/[^0-9]/g, ""))}
-                    placeholder={debtTotal ? Number(debtTotal).toLocaleString() : "10,000,000"}
-                    style={{ ...inputStyle, flex: 1, border: "1px solid #FED7AA", color: "#F97316" }}
-                  />
-                  <button type="button" onClick={() => setShowCalc(showCalc === "debtRemaining" ? null : "debtRemaining")} style={calcToggleBtn(showCalc === "debtRemaining")}>🧮</button>
-                </div>
-                {showCalc === "debtRemaining" && (
-                  <MiniCalc baseValue={debtRemaining || debtTotal} onApply={(v) => { setDebtRemaining(v); setShowCalc(null); }} />
-                )}
-              </>
-            )}
-
-            {/* 메모: 수정 시에만 표시 */}
-            {selectedGoal && (
-              <>
-                <label style={labelStyle}>수정 메모 (선택)</label>
-                <input
-                  value={changeMemo}
-                  onChange={(e) => setChangeMemo(e.target.value)}
-                  placeholder="예: 월급날 추가 저축"
-                  style={inputStyle}
-                />
-              </>
-            )}
-
-            <label style={labelStyle}>기간</label>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <button onClick={() => setPeriodType("ALWAYS")} style={{
-                height: 42, borderRadius: 14, fontWeight: 800, cursor: "pointer",
-                border: periodType === "ALWAYS" ? `1px solid ${theme.colors.primary}` : `1px solid ${theme.colors.border}`,
-                background: periodType === "ALWAYS" ? theme.colors.primarySoft : "white",
-              }}>상시</button>
-              <button onClick={() => setPeriodType("LIMITED")} style={{
-                height: 42, borderRadius: 14, fontWeight: 800, cursor: "pointer",
-                border: periodType === "LIMITED" ? `1px solid ${theme.colors.primary}` : `1px solid ${theme.colors.border}`,
-                background: periodType === "LIMITED" ? theme.colors.primarySoft : "white",
-              }}>한시</button>
-            </div>
-
-            {periodType === "LIMITED" && (
-              <>
-                <label style={labelStyle}>마감일</label>
-                <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={inputStyle} />
-              </>
-            )}
-
-            <div style={actionGridStyle}>
-              {selectedGoal && (
-                <button onClick={deleteGoal} style={deleteButtonStyle}>
-                  <Trash2 size={16} />삭제
-                </button>
               )}
-              <button onClick={saveGoal} style={{ ...saveButtonStyle, gridColumn: selectedGoal ? "auto" : "1 / -1" }}>
-                저장
-              </button>
+
+              <label style={labelStyle}>아이콘</label>
+              <div style={iconGridStyle}>
+                {ICONS.map((item) => (
+                  <button key={item} onClick={() => setIcon(item)} style={{
+                    ...goalIconButtonStyle,
+                    border: icon === item ? `1px solid ${theme.colors.primary}` : `1px solid ${theme.colors.border}`,
+                    background: icon === item ? theme.colors.primarySoft : "white",
+                  }}>{item}</button>
+                ))}
+              </div>
+
+              <label style={labelStyle}>목표명</label>
+              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={goalType === "DEBT" ? "예: 여행 경비" : "예: 여행 자금"} style={inputStyle} />
+
+              {goalType === "SAVING" ? (
+                <>
+                  <label style={labelStyle}>현재 금액</label>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      value={currentAmount ? Number(currentAmount).toLocaleString() : ""}
+                      onChange={(e) => setCurrentAmount(e.target.value.replace(/[^0-9]/g, ""))}
+                      placeholder="0"
+                      style={{ ...inputStyle, flex: 1 }}
+                    />
+                    <button type="button" onClick={() => setShowCalc(showCalc === "current" ? null : "current")} style={calcToggleBtn(showCalc === "current")}>🧮</button>
+                  </div>
+                  {showCalc === "current" && (
+                    <MiniCalc baseValue={currentAmount} onApply={(v) => { setCurrentAmount(v); setShowCalc(null); }} />
+                  )}
+
+                  <label style={labelStyle}>목표 금액</label>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      value={targetAmount ? Number(targetAmount).toLocaleString() : ""}
+                      onChange={(e) => setTargetAmount(e.target.value.replace(/[^0-9]/g, ""))}
+                      placeholder="2,000,000"
+                      style={{ ...inputStyle, flex: 1 }}
+                    />
+                    <button type="button" onClick={() => setShowCalc(showCalc === "target" ? null : "target")} style={calcToggleBtn(showCalc === "target")}>🧮</button>
+                  </div>
+                  {showCalc === "target" && (
+                    <MiniCalc baseValue={targetAmount} onApply={(v) => { setTargetAmount(v); setShowCalc(null); }} />
+                  )}
+                </>
+              ) : (
+                <>
+                  <label style={labelStyle}>초기 금액</label>
+                  <input
+                    value={debtTotal ? Number(debtTotal).toLocaleString() : ""}
+                    onChange={(e) => setDebtTotal(e.target.value.replace(/[^0-9]/g, ""))}
+                    placeholder="10,000,000"
+                    style={{ ...inputStyle, border: "1px solid #FED7AA", color: "#F97316" }}
+                  />
+                  <label style={labelStyle}>현재 남은 금액</label>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      value={debtRemaining ? Number(debtRemaining).toLocaleString() : ""}
+                      onChange={(e) => setDebtRemaining(e.target.value.replace(/[^0-9]/g, ""))}
+                      placeholder={debtTotal ? Number(debtTotal).toLocaleString() : "10,000,000"}
+                      style={{ ...inputStyle, flex: 1, border: "1px solid #FED7AA", color: "#F97316" }}
+                    />
+                    <button type="button" onClick={() => setShowCalc(showCalc === "debtRemaining" ? null : "debtRemaining")} style={calcToggleBtn(showCalc === "debtRemaining")}>🧮</button>
+                  </div>
+                  {showCalc === "debtRemaining" && (
+                    <MiniCalc baseValue={debtRemaining || debtTotal} onApply={(v) => { setDebtRemaining(v); setShowCalc(null); }} />
+                  )}
+                </>
+              )}
+
+              {/* 메모: 수정 시에만 표시 */}
+              {selectedGoal && (
+                <>
+                  <label style={labelStyle}>수정 메모 (선택)</label>
+                  <input
+                    value={changeMemo}
+                    onChange={(e) => setChangeMemo(e.target.value)}
+                    placeholder="예: 월급날 추가 저축"
+                    style={inputStyle}
+                  />
+                </>
+              )}
+
+              <label style={labelStyle}>기간</label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <button onClick={() => setPeriodType("ALWAYS")} style={{
+                  height: 42, borderRadius: 14, fontWeight: 800, cursor: "pointer",
+                  border: periodType === "ALWAYS" ? `1px solid ${theme.colors.primary}` : `1px solid ${theme.colors.border}`,
+                  background: periodType === "ALWAYS" ? theme.colors.primarySoft : "white",
+                }}>상시</button>
+                <button onClick={() => setPeriodType("LIMITED")} style={{
+                  height: 42, borderRadius: 14, fontWeight: 800, cursor: "pointer",
+                  border: periodType === "LIMITED" ? `1px solid ${theme.colors.primary}` : `1px solid ${theme.colors.border}`,
+                  background: periodType === "LIMITED" ? theme.colors.primarySoft : "white",
+                }}>한시</button>
+              </div>
+
+              {periodType === "LIMITED" && (
+                <>
+                  <label style={labelStyle}>마감일</label>
+                  <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={inputStyle} />
+                </>
+              )}
             </div>
+
+            {/* ── 고정 푸터 ── */}
+            <div style={{ paddingTop: 14, borderTop: `1px solid ${theme.colors.border}` }}>
+              <div style={actionGridStyle}>
+                {selectedGoal && (
+                  <button onClick={deleteGoal} style={deleteButtonStyle}>
+                    <Trash2 size={16} />삭제
+                  </button>
+                )}
+                <button onClick={saveGoal} style={{ ...saveButtonStyle, gridColumn: selectedGoal ? "auto" : "1 / -1" }}>
+                  저장
+                </button>
+              </div>
+            </div>
+
           </section>
         </div>
       )}
@@ -607,7 +616,7 @@ const barStyle = { marginTop: 12, height: 7, borderRadius: 999, overflow: "hidde
 const barFillStyle = { height: "100%", borderRadius: 999 } as const;
 const bottomRowStyle = { marginTop: 10, display: "flex", justifyContent: "space-between", fontSize: 12, color: theme.colors.subtext } as const;
 const overlayStyle = { position: "fixed", inset: 0, background: "rgba(24,17,27,0.28)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 1000, paddingBottom: "calc(64px + env(safe-area-inset-bottom))" } as const;
-const modalStyle = { width: "100%", maxWidth: 430, background: "white", borderRadius: "26px 26px 0 0", padding: "18px 18px calc(18px + env(safe-area-inset-bottom))", boxShadow: "0 -8px 40px rgba(0,0,0,0.18)", maxHeight: "calc(92vh - 64px - env(safe-area-inset-bottom))", overflowY: "auto" } as const;
+const modalStyle = { width: "100%", maxWidth: 430, background: "white", borderRadius: "26px 26px 0 0", padding: "18px 18px calc(18px + env(safe-area-inset-bottom))", boxShadow: "0 -8px 40px rgba(0,0,0,0.18)", maxHeight: "calc(92vh - 64px - env(safe-area-inset-bottom))", display: "flex", flexDirection: "column" } as const;
 const modalHeaderStyle = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } as const;
 const labelStyle = { display: "block", fontSize: 12, fontWeight: 900, color: theme.colors.subtext, margin: "12px 0 6px" } as const;
 const iconGridStyle = { display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 } as const;
