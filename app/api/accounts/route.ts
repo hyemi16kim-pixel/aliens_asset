@@ -49,21 +49,21 @@ export async function GET(req: NextRequest) {
           prisma.transaction.findMany({
             where: { familyId, type: "EXPENSE", fromAccountId: account.id, transactionAt: { gte: nextStart, lte: nextEnd } },
           }),
-          // 납부액: 사이클 시작 ~ 오늘까지 모든 이체 포함 (사이클 마감 후 납부도 반영)
-          // "카드 이번달 선결제"는 다음달 분이므로 제외
+          // 납부액: 사이클 시작 ~ 오늘까지 (사이클 마감 후 납부도 반영)
+          // 선결제 카테고리는 제외 (별도 사이클 납부분과 혼용 방지)
           prisma.transaction.findMany({
             where: {
               familyId, type: "TRANSFER", toAccountId: account.id,
               transactionAt: { gte: thisStart, lte: now },
-              NOT: { category: "카드 이번달 선결제" },
+              NOT: { category: { in: ["카드 전월 선결제", "카드 이번달 선결제"] } },
             },
           }),
-          // 다음달 선결제: "카드 이번달 선결제" 카테고리로 명시된 이체만 (사이클 시작 이후)
+          // 다음달 예상: 다음 사이클 기간 이체 (선결제 카테고리 제외)
           prisma.transaction.findMany({
             where: {
               familyId, type: "TRANSFER", toAccountId: account.id,
-              category: "카드 이번달 선결제",
-              transactionAt: { gte: thisStart },
+              transactionAt: { gte: nextStart, lte: nextEnd },
+              NOT: { category: { in: ["카드 전월 선결제", "카드 이번달 선결제"] } },
             },
           }),
         ]);
