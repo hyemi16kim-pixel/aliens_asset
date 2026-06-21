@@ -42,28 +42,43 @@ export async function GET(req: NextRequest) {
 
         const now = new Date();
 
+        // 사이클 마감 직후 시점 (사이클 기간 내 이전 데이터와 겹치지 않도록)
+        const afterCycleEnd = new Date(thisEnd.getTime() + 1000);
+
         const [thisTxs, nextTxs, thisPaidTxs, nextPaidTxs] = await Promise.all([
+          // 지난 사이클 사용액
           prisma.transaction.findMany({
             where: { familyId, type: "EXPENSE", fromAccountId: account.id, transactionAt: { gte: thisStart, lte: thisEnd } },
           }),
+          // 이번 사이클 사용액
           prisma.transaction.findMany({
             where: { familyId, type: "EXPENSE", fromAccountId: account.id, transactionAt: { gte: nextStart, lte: nextEnd } },
           }),
-          // 납부액: 사이클 시작 ~ 오늘까지 (사이클 마감 후 납부도 반영)
-          // 선결제 카테고리는 제외 (별도 사이클 납부분과 혼용 방지)
+          // 이번달 결제 예정액 차감 (2가지 케이스)
+          // ① 사이클 기간 내: "이체" 카테고리만 (선결제 카테고리는 다른 사이클 데이터일 수 있으므로 제외)
+          // ② 사이클 마감 후 오늘까지: "카드 이번달 선결제" 제외 모두 인정 (카드 전월 선결제, 이체 등)
           prisma.transaction.findMany({
             where: {
               familyId, type: "TRANSFER", toAccountId: account.id,
-              transactionAt: { gte: thisStart, lte: now },
-              NOT: { category: { in: ["카드 전월 선결제", "카드 이번달 선결제"] } },
+              OR: [
+                {
+                  transactionAt: { gte: thisStart, lte: thisEnd },
+                  NOT: { category: { in: ["카드 전월 선결제", "카드 이번달 선결제"] } },
+                },
+                {
+                  transactionAt: { gte: afterCycleEnd, lte: now },
+                  NOT: { category: "카드 이번달 선결제" },
+                },
+              ],
             },
           }),
-          // 다음달 예상: 다음 사이클 기간 이체 (선결제 카테고리 제외)
+          // 다음달 결제 예정액 차감:
+          // "카드 이번달 선결제" 카테고리로 명시한 것만 (이번 사이클 시작 이후)
           prisma.transaction.findMany({
             where: {
               familyId, type: "TRANSFER", toAccountId: account.id,
-              transactionAt: { gte: nextStart, lte: nextEnd },
-              NOT: { category: { in: ["카드 전월 선결제", "카드 이번달 선결제"] } },
+              category: "카드 이번달 선결제",
+              transactionAt: { gte: nextStart },
             },
           }),
         ]);
