@@ -84,6 +84,65 @@ async function applyBalance(tx: {
   }
 }
 
+// 주식 매수/매도 트랜잭션 삭제 시 보유수량 롤백
+async function rollbackStockHolding(tx: {
+  category: string | null;
+  amount: number;
+  memo: string | null;
+  fromAccountId: number | null;
+  toAccountId: number | null;
+}) {
+  if (tx.category !== "주식 매수" && tx.category !== "주식 매도") return;
+
+  // memo 형식: "삼성전자(005930) 10주"
+  const match = (tx.memo || "").match(/^(.+)\(([A-Z0-9]+)\)\s+(\d+)주/);
+  if (!match) return;
+
+  const name = match[1].trim();
+  const code = match[2];
+  const qty = Number(match[3]);
+  const isBuy = tx.category === "주식 매수";
+  const accountId = isBuy ? tx.fromAccountId : tx.toAccountId;
+  if (!accountId) return;
+
+  const db = prisma as any;
+  const holding = await db.stockHolding.findUnique({
+    where: { accountId_code: { accountId, code } },
+  });
+
+  if (isBuy) {
+    // 매수 취소 → 수량 감소, avgPrice 복원
+    if (!holding) return;
+    const newQty = holding.quantity - qty;
+    if (newQty <= 0) {
+      await db.stockHolding.delete({ where: { id: holding.id } });
+    } else {
+      const currentCost = holding.quantity * Number(holding.avgPrice);
+      const buyCost = Number(tx.amount);
+      const prevCost = Math.max(currentCost - buyCost, 0);
+      const restoredAvgPrice = Math.round(prevCost / newQty);
+      await db.stockHolding.update({
+        where: { id: holding.id },
+        data: { quantity: newQty, avgPrice: restoredAvgPrice },
+      });
+    }
+  } else {
+    // 매도 취소 → 수량 증가 (avgPrice는 기존 유지)
+    if (holding) {
+      await db.stockHolding.update({
+        where: { id: holding.id },
+        data: { quantity: holding.quantity + qty },
+      });
+    } else {
+      // 전량 매도로 보유 종목이 삭제된 경우 → 매도 단가로 재생성
+      const avgPrice = Math.round(Number(tx.amount) / qty);
+      await db.stockHolding.create({
+        data: { accountId, name, code, quantity: qty, avgPrice },
+      });
+    }
+  }
+}
+
 async function rollbackBalance(tx: {
   type: TxType;
   amount: number;
@@ -235,6 +294,7 @@ export async function PATCH(req: NextRequest) {
     if (!oldTx) throw new Error("기존 거래 없음");
 
     await rollbackBalance(oldTx as any);
+    await rollbackStockHolding(oldTx as any);
 
     const result = await prisma.transaction.update({
       where: { id: body.id },
@@ -275,6 +335,7 @@ export async function DELETE(req: NextRequest) {
     if (!oldTx) throw new Error("기존 거래 없음");
 
     await rollbackBalance(oldTx as any);
+    await rollbackStockHolding(oldTx as any);
 
     await prisma.transaction.delete({
       where: { id },
