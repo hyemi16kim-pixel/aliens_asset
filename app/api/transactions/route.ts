@@ -223,7 +223,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const familyId = Number(searchParams.get("familyId") || 1);
     const limitParam = searchParams.get("limit");
-    const limit = limitParam ? Number(limitParam) : 300; // 기본 최대 300개
+    const limit = limitParam ? Number(limitParam) : 5000; // 기본 최대 5000개
 
     const transactions = await prisma.transaction.findMany({
       where: { familyId },
