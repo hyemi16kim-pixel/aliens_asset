@@ -313,6 +313,19 @@ function TransactionsContent() {
     setMonth(getBaseMonthByStartDay(new Date(), savedStartDay));
   }, []);
 
+  // 홈 최근 거래내역에서 ?edit=<id> 로 들어오면 그 거래 수정 창을 바로 열기
+  const handledEditIdRef = useRef<string | null>(null);
+  const openedFromHomeRef = useRef(false);
+  useEffect(() => {
+    const editId = searchParams.get("edit");
+    if (!editId || handledEditIdRef.current === editId || transactions.length === 0) return;
+    const tx = transactions.find((t) => String(t.id) === editId);
+    if (!tx) return;
+    handledEditIdRef.current = editId;
+    openedFromHomeRef.current = true;
+    openEditSheet(tx);
+  }, [searchParams, transactions]);
+
   /* ─── 계산 ── */
   const monthRange = useMemo(() => getCustomMonthRange(month, monthStartDay), [month, monthStartDay]);
   const monthLabel = `${month.getFullYear()}년 ${month.getMonth() + 1}월`;
@@ -480,7 +493,14 @@ function TransactionsContent() {
     return [...base, ...custom];
   }, [editType, serverCategories]);
 
-  const closeEditSheet = () => { setSelectedTx(null); setEditAmount(""); setEditMemo(""); };
+  const closeEditSheet = () => {
+    setSelectedTx(null); setEditAmount(""); setEditMemo("");
+    // 홈 최근 거래내역에서 들어온 경우 닫으면 홈으로 돌아가기
+    if (openedFromHomeRef.current) {
+      openedFromHomeRef.current = false;
+      router.back();
+    }
+  };
 
   const changeEditType = (nextType: TransactionType) => {
     setEditType(nextType);

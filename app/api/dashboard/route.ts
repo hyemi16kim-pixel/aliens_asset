@@ -109,9 +109,8 @@ export async function GET(req: NextRequest) {
           fromAccount: { select: { id: true, name: true, type: true } },
           toAccount: { select: { id: true, name: true, type: true } },
         },
-        orderBy: {
-          transactionAt: "desc",
-        },
+        // 최근에 입력한 순서 (지난 날짜로 넣은 기록도 바로 보이게)
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: 10,
       }),
 

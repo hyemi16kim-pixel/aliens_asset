@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { theme } from "@/components/lib/theme";
 import { useEffect, useState } from "react";
 import {
@@ -34,6 +35,7 @@ export default function RecentTransactions({
 }: {
   items?: Transaction[];
 }) {
+  const router = useRouter();
   const [dbIconMap, setDbIconMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -145,7 +147,10 @@ const getIcon = (tx: Transaction) => {
   .map((tx, idx, arr) => (
           <div
             key={tx.id}
+            role="button"
+            onClick={() => router.push(`/transactions?edit=${tx.id}`)}
             style={{
+              cursor: "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
