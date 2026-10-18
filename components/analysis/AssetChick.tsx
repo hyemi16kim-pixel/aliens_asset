@@ -171,7 +171,19 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
       `}</style>
 
       {/* 무대 */}
-      <div style={{ position: "relative", height: 220, borderRadius: 20, overflow: "hidden", background: stage.bg, marginTop: 12 }}>
+      <div
+        style={{
+          position: "relative",
+          height: 220,
+          borderRadius: 20,
+          overflow: "hidden",
+          // 초원 배경 + (이미지 로딩 전/실패 시) 단계 색
+          background: `url(/chicks/bg_meadow.jpg) center 62% / cover no-repeat, ${stage.bg}`,
+          marginTop: 12,
+        }}
+      >
+        {/* 진화 단계 색을 살짝 얹어 분위기만 바꿈 */}
+        <div style={{ position: "absolute", inset: 0, background: stage.bg, opacity: stage.from >= 31 ? 0.28 : 0.12, pointerEvents: "none" }} />
         {/* 빛기둥 (불사조 신화) */}
         {stage.pillars &&
           [18, 36, 64, 82].map((left, i) => (
@@ -290,6 +302,21 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
             )}
           </span>
         ))}
+
+        {/* 발밑 그림자 (풀밭에 서 있는 느낌) */}
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            bottom: 24,
+            width: 92,
+            height: 16,
+            marginLeft: -46,
+            borderRadius: "50%",
+            background: "radial-gradient(ellipse, rgba(30,60,10,0.35) 0%, transparent 70%)",
+            pointerEvents: "none",
+          }}
+        />
 
         {/* 병아리 */}
         <button
