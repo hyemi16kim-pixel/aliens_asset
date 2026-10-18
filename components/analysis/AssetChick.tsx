@@ -7,9 +7,9 @@ import { getBaseMonthByStartDay, getCustomMonthRange } from "@/components/lib/mo
  * 우리의 자산아리 🌱
  *
  * - 목표 자산(5억)을 50단계로 나눠 레벨 1~50 (1레벨 = 1,000만원)
- * - 이미지: public/chicks/lv01_1.png ~ lv50_4.png (레벨당 최대 4장)
- *   앱에 들어올 때마다 그 레벨 이미지 중 하나를 무작위로 보여줌
- *   이미지가 없으면 다른 번호를 시도하고, 하나도 없으면 🐣 이모지로 대신 표시
+ * - 이미지: public/chicks/lvNN_1~4.png  (1 화남 · 2 웃음 · 3 울음 · 4 무표정)
+ *   앱에 들어올 때마다 해당되는 한줄평 중 하나를 무작위로 고르고, 그 기분에 맞는 표정을 보여줌
+ *   그 표정 이미지가 없으면 다른 표정을 시도하고, 하나도 없으면 🐣 이모지로 대신 표시
  * - 레벨 구간별 주변 효과(오라·파티클)는 CSS로 그림
  * - 한줄평: 이번 달/오늘 소비 데이터를 보고 해당되는 문장 중 하나를 무작위로 말함 (병아리를 누르면 다른 말)
  */
@@ -63,6 +63,10 @@ const won = (v: number) =>
   v >= 100_000_000 ? `${(v / 100_000_000).toFixed(1)}억` : `${Math.round(v / 10_000).toLocaleString()}만`;
 
 /* ───────── 한줄평 ───────── */
+type Mood = "angry" | "happy" | "sad" | "neutral";
+type Line = { text: string; mood: Mood };
+// 표정 이미지 번호: 1 화남 · 2 웃음 · 3 울음 · 4 무표정
+const MOOD_VARIANT: Record<Mood, number> = { angry: 1, happy: 2, sad: 3, neutral: 4 };
 const ADJUST_CATEGORIES = ["자산수정", "자산 수정"]; // 잔고 맞춤 기록은 소비로 안 봄
 
 function buildLines(
@@ -71,7 +75,7 @@ function buildLines(
   monthStartDay: number,
   level: number,
   levelProgress: number
-): string[] {
+): Line[] {
   const now = new Date();
   const cur = getCustomMonthRange(getBaseMonthByStartDay(now, monthStartDay), monthStartDay);
   const prevBase = getBaseMonthByStartDay(new Date(cur.start.getTime() - 1), monthStartDay);
@@ -91,24 +95,25 @@ function buildLines(
     }, 0);
   const cat = (name: string) => (t: Tx) => isExpense(t) && (t.category || "") === name;
 
-  const lines: string[] = [];
+  const lines: Line[] = [];
+  const say = (text: string, mood: Mood) => lines.push({ text, mood });
 
   // 오늘 식비
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayFood = sum(todayStart, now, cat("식비"));
-  if (now.getHours() >= 14 && todayFood === 0) lines.push("오늘은 식비를 많이 아껴서 인내심을 많이 키웠어.");
+  if (now.getHours() >= 14 && todayFood === 0) say("오늘은 식비를 많이 아껴서 인내심을 많이 키웠어.", "happy");
 
   // 식비 (이번 달 vs 지난달 같은 시점)
   const foodNow = sum(cur.start, now, cat("식비"));
   const foodPrev = sum(prev.start, prevSamePoint, cat("식비"));
-  if (foodPrev > 0 && foodNow < foodPrev * 0.85) lines.push("지난달보다 식비를 아껴서 인내심이 쑥쑥 자랐어.");
-  if (foodPrev > 0 && foodNow > foodPrev * 1.2) lines.push("요즘 맛있는 걸 많이 먹어서 배가 빵빵해.");
+  if (foodPrev > 0 && foodNow < foodPrev * 0.85) say("지난달보다 식비를 아껴서 인내심이 쑥쑥 자랐어.", "happy");
+  if (foodPrev > 0 && foodNow > foodPrev * 1.2) say("요즘 맛있는 걸 많이 먹어서 배가 빵빵해.", "neutral");
 
   // 공과금
   const billNow = sum(cur.start, now, cat("공과금"));
   const billPrev = sum(prev.start, prevSamePoint, cat("공과금"));
-  if (billPrev > 0 && billNow > billPrev * 1.1) lines.push("저번달 대비 많은 공과금을 내서 조금 피곤해.");
-  if (billPrev > 0 && billNow < billPrev * 0.9) lines.push("공과금이 지난달보다 덜 나와서 몸이 가벼워.");
+  if (billPrev > 0 && billNow > billPrev * 1.1) say("저번달 대비 많은 공과금을 내서 조금 피곤해.", "sad");
+  if (billPrev > 0 && billNow < billPrev * 0.9) say("공과금이 지난달보다 덜 나와서 몸이 가벼워.", "happy");
 
   // 예산
   const budgetEntries = Object.entries(budgets || {}).filter(([, v]) => Number(v) > 0);
@@ -117,9 +122,9 @@ function buildLines(
     const totalBudget = budgetEntries.reduce((s, [, b]) => s + Number(b), 0);
     const totalSpent = budgetEntries.reduce((s, [name]) => s + sum(cur.start, now, cat(name)), 0);
     if (over.length > 0) {
-      lines.push(`${over[0][0]} 예산을 넘겨서 체력이 조금 떨어졌어.`);
+      say(`${over[0][0]} 예산을 넘겨서 체력이 조금 떨어졌어.`, "angry");
     } else if (totalSpent <= totalBudget * elapsedRatio) {
-      lines.push("이번달은 예산 내로 생활비를 써서 지능이 올랐어.");
+      say("이번달은 예산 내로 생활비를 써서 지능이 올랐어.", "happy");
     }
   }
 
@@ -127,16 +132,17 @@ function buildLines(
   const incNow = sum(cur.start, now, (t) => t.type === "INCOME" && !ADJUST_CATEGORIES.includes(t.category || ""));
   const expNow = sum(cur.start, now, isExpense);
   const expPrev = sum(prev.start, prevSamePoint, isExpense);
-  if (incNow > expNow && incNow > 0) lines.push("이번달은 쓴 것보다 번 게 많아서 몸집이 커졌어.");
-  if (expPrev > 0 && expNow > expPrev * 1.15) lines.push("지난달보다 지출 속도가 빨라서 숨이 조금 차.");
-  if (expPrev > 0 && expNow < expPrev * 0.85) lines.push("지난달보다 덜 써서 마음이 든든해.");
+  if (incNow > expNow && incNow > 0) say("이번달은 쓴 것보다 번 게 많아서 몸집이 커졌어.", "happy");
+  if (expPrev > 0 && expNow > expPrev * 1.15) say("지난달보다 지출 속도가 빨라서 숨이 조금 차.", "sad");
+  if (expPrev > 0 && expNow < expPrev * 0.85) say("지난달보다 덜 써서 마음이 든든해.", "happy");
 
   // 레벨
-  if (level < MAX_LEVEL && levelProgress >= 0.9) lines.push("다음 레벨까지 거의 다 왔어! 조금만 더!");
-  if (level >= MAX_LEVEL) lines.push("목표 달성! 우리 이제 황금 병아리야.");
+  if (level < MAX_LEVEL && levelProgress >= 0.9) say("다음 레벨까지 거의 다 왔어! 조금만 더!", "happy");
+  if (level >= MAX_LEVEL) say("목표 달성! 우리 이제 황금 병아리야.", "happy");
 
   if (lines.length === 0) {
-    lines.push("오늘도 차곡차곡 자라는 중이야.", `${level}레벨 병아리, 오늘도 열심히 모으는 중!`);
+    say("오늘도 차곡차곡 자라는 중이야.", "neutral");
+    say(`${level}레벨 병아리, 오늘도 열심히 모으는 중!`, "neutral");
   }
   return lines;
 }
@@ -156,28 +162,25 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
   );
 
   // 무작위 값은 화면이 뜬 뒤에 정해야 서버/클라이언트 불일치가 없음
-  const [variant, setVariant] = useState<number | null>(null);
+  const [lineIndex, setLineIndex] = useState<number | null>(null);
   const [tries, setTries] = useState(0);
-  const [lineIndex, setLineIndex] = useState(0);
-  useEffect(() => {
-    setVariant(1 + Math.floor(Math.random() * VARIANTS));
-    setTries(0);
-  }, [level]);
   useEffect(() => {
     setLineIndex(Math.floor(Math.random() * lines.length));
-  }, [lines.length]);
+    setTries(0);
+  }, [lines.length, level]);
 
+  const line = lineIndex === null ? null : lines[lineIndex] ?? lines[0];
+  // 기분에 맞는 표정 번호부터 시작, 이미지가 없으면 다음 번호로
+  const baseVariant = line ? MOOD_VARIANT[line.mood] : null;
+  const variant = baseVariant ? ((baseVariant - 1 + tries) % VARIANTS) + 1 : null;
   const imageFailed = tries >= VARIANTS;
   const src = variant ? `/chicks/lv${String(level).padStart(2, "0")}_${variant}.png` : null;
-  const onImgError = () => {
-    // 이 번호 이미지가 없으면 다음 번호 시도
-    setTries((t) => t + 1);
-    setVariant((v) => ((v || 1) % VARIANTS) + 1);
-  };
+  const onImgError = () => setTries((t) => t + 1);
 
   const nextLine = () => {
     if (lines.length <= 1) return;
-    setLineIndex((i) => (i + 1 + Math.floor(Math.random() * (lines.length - 1))) % lines.length);
+    setTries(0);
+    setLineIndex((i) => ((i ?? 0) + 1 + Math.floor(Math.random() * (lines.length - 1))) % lines.length);
   };
 
   const dark = tier.from === 47;
@@ -340,7 +343,7 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
 
       {/* 한줄평 말풍선 */}
       <div
-        key={lineIndex}
+        key={lineIndex ?? -1}
         onClick={nextLine}
         style={{
           position: "relative",
@@ -370,7 +373,7 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
             transform: "translateX(-50%) rotate(45deg)",
           }}
         />
-        🐥 {lines[lineIndex] ?? lines[0]}
+        🐥 {line?.text ?? "..."}
       </div>
 
       {/* 레벨 진행 */}
