@@ -1,7 +1,7 @@
 
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import BottomNav from "@/components/navigation/BottomNav";
 import { theme } from "@/components/lib/theme";
@@ -242,6 +242,11 @@ function TransactionsContent() {
   const [pickerDragStart, setPickerDragStart] = useState<Date | null>(null);
   const [pickerDragEnd, setPickerDragEnd] = useState<Date | null>(null);
 
+  // 달력 기간 선택: 날짜를 길게 누르면 시작일, 다음에 누른 날짜가 종료일
+  const [rangePendingStart, setRangePendingStart] = useState<string | null>(null);
+  const [selectedRange, setSelectedRange] = useState<{ start: string; end: string } | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFired = useRef(false);
   const [dayDetailFilter, setDayDetailFilter] = useState<"ALL" | "INCOME" | "EXPENSE" | "TRANSFER" | "STOCK">("ALL");
   const [categoryFilter, setCategoryFilter] = useState<string>("전체");
 
@@ -399,6 +404,59 @@ function TransactionsContent() {
     if (!selectedDay) return [];
     return transactions.filter((tx) => toLocalDateKey(tx.transactionAt) === selectedDay);
   }, [transactions, selectedDay]);
+
+  const selectedRangeTransactions = useMemo(() => {
+    if (!selectedRange) return [];
+    return transactions
+      .filter((tx) => {
+        const k = toLocalDateKey(tx.transactionAt);
+        return k >= selectedRange.start && k <= selectedRange.end;
+      })
+      .sort((a, b) => new Date(b.transactionAt).getTime() - new Date(a.transactionAt).getTime());
+  }, [transactions, selectedRange]);
+
+  const cancelLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  // 길게 누르기 시작 (0.5초 유지되면 기간 선택 시작)
+  const startLongPress = (dayKey: string) => {
+    longPressFired.current = false;
+    cancelLongPress();
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true;
+      longPressTimer.current = null;
+      setRangePendingStart(dayKey);
+      setSelectedRange({ start: dayKey, end: dayKey });
+      setSelectedDay(null);
+      setDayDetailFilter("ALL");
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate?.(30);
+    }, 500);
+  };
+
+  // 달력 날짜 탭
+  const handleCalendarDayClick = (dayKey: string) => {
+    if (longPressFired.current) {
+      // 길게 누른 직후 따라오는 클릭은 무시
+      longPressFired.current = false;
+      return;
+    }
+    if (rangePendingStart) {
+      // 시작일이 정해진 상태 → 이번 탭이 종료일
+      const [start, end] = dayKey < rangePendingStart ? [dayKey, rangePendingStart] : [rangePendingStart, dayKey];
+      setSelectedRange({ start, end });
+      setRangePendingStart(null);
+      setDayDetailFilter("ALL");
+      return;
+    }
+    // 일반 탭: 하루 보기 (기간 보기는 해제)
+    setSelectedRange(null);
+    setSelectedDay(selectedDay === dayKey ? null : dayKey);
+    setDayDetailFilter("ALL");
+  };
 
   /* ─── 액션 ── */
   const openEditSheet = (tx: Transaction) => {
@@ -634,7 +692,19 @@ function TransactionsContent() {
                 {/* 달력 아이콘 버튼 + 선택된 날짜 라벨 */}
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <button
-                    onClick={() => { setShowDatePicker(true); setPickerMonth(new Date()); setPickerDragStart(null); setPickerDragEnd(null); }}
+                    onClick={() => {
+                      // 이전에 고른 기간이 있으면 그 기간을 펼친 상태로 열기
+                      if (customRange) {
+                        setPickerMonth(new Date(customRange.start.getFullYear(), customRange.start.getMonth(), 1));
+                        setPickerDragStart(new Date(customRange.start.getFullYear(), customRange.start.getMonth(), customRange.start.getDate()));
+                        setPickerDragEnd(new Date(customRange.end.getFullYear(), customRange.end.getMonth(), customRange.end.getDate()));
+                      } else {
+                        setPickerMonth(new Date());
+                        setPickerDragStart(null);
+                        setPickerDragEnd(null);
+                      }
+                      setShowDatePicker(true);
+                    }}
                     style={{
                       height: 28, width: 28, borderRadius: 999,
                       display: "grid", placeItems: "center", cursor: "pointer",
@@ -677,7 +747,7 @@ function TransactionsContent() {
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", textAlign: "center", marginBottom: 6 }}>
                     {["일","월","화","수","목","금","토"].map(d => <span key={d} style={{ fontSize: 11, color: "#A59DBD", fontWeight: 700 }}>{d}</span>)}
                   </div>
-                  {/* 날짜 그리드 */}
+                  {/* 날짜 그리드: 첫 탭 = 시작일, 두 번째 탭 = 종료일 (달을 넘겨서 골라도 됨) */}
                   {(() => {
                     const firstDay = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth(), 1).getDay();
                     const daysInMonth = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 0).getDate();
@@ -685,69 +755,97 @@ function TransactionsContent() {
                     for (let i = 1; i <= daysInMonth; i++) {
                       cells.push(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth(), i));
                     }
-                    // 터치 이벤트로 드래그 범위 계산
-                    const getDateFromTouch = (e: React.TouchEvent) => {
-                      const touch = e.touches[0] || e.changedTouches[0];
-                      const el = document.elementFromPoint(touch.clientX, touch.clientY);
-                      const attr = el?.getAttribute("data-date");
-                      return attr ? new Date(attr) : null;
-                    };
-                    const rangeStart = pickerDragStart && pickerDragEnd
-                      ? (pickerDragStart <= pickerDragEnd ? pickerDragStart : pickerDragEnd)
-                      : pickerDragStart;
-                    const rangeEnd = pickerDragStart && pickerDragEnd
-                      ? (pickerDragStart <= pickerDragEnd ? pickerDragEnd : pickerDragStart)
-                      : pickerDragStart;
+                    const rangeStart = pickerDragStart;
+                    const rangeEnd = pickerDragEnd ?? pickerDragStart;
                     const inPickerRange = (d: Date) => rangeStart && rangeEnd
                       ? d >= rangeStart && d <= rangeEnd : false;
+                    const todayStr = new Date().toDateString();
+                    const pickDay = (d: Date) => {
+                      if (!pickerDragStart || pickerDragEnd) {
+                        // 처음 고르거나, 이미 기간이 정해진 상태에서 다시 누르면 새 시작일
+                        setPickerDragStart(d);
+                        setPickerDragEnd(null);
+                      } else if (d < pickerDragStart) {
+                        // 시작일보다 앞을 누르면 앞뒤를 바꿔서 기간으로
+                        setPickerDragEnd(pickerDragStart);
+                        setPickerDragStart(d);
+                      } else {
+                        setPickerDragEnd(d);
+                      }
+                    };
                     return (
-                      <div
-                        style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "3px 0", userSelect: "none", touchAction: "none" }}
-                        onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); const d = getDateFromTouch(e); if (d) { setPickerDragStart(d); setPickerDragEnd(d); } }}
-                        onTouchMove={(e) => { e.stopPropagation(); e.preventDefault(); const d = getDateFromTouch(e); if (d && pickerDragStart) setPickerDragEnd(d); }}
-                        onTouchEnd={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          if (pickerDragStart && pickerDragEnd) {
-                            const s = new Date(pickerDragStart <= pickerDragEnd ? pickerDragStart : pickerDragEnd);
-                            const en = new Date(pickerDragStart <= pickerDragEnd ? pickerDragEnd : pickerDragStart);
-                            s.setHours(0, 0, 0, 0);
-                            en.setHours(23, 59, 59, 999);
-                            setCustomRange({ start: s, end: en });
-                            setShowDatePicker(false);
-                          }
-                        }}
-                      >
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "3px 0", userSelect: "none" }}>
                         {cells.map((d, i) => {
                           if (!d) return <div key={`empty-${i}`} />;
                           const isInRange = inPickerRange(d);
                           const isStart = rangeStart && d.toDateString() === rangeStart.toDateString();
                           const isEnd = rangeEnd && d.toDateString() === rangeEnd.toDateString();
+                          const isToday = d.toDateString() === todayStr;
                           return (
-                            <div
+                            <button
+                              type="button"
                               key={d.toISOString()}
-                              data-date={d.toISOString()}
+                              onClick={() => pickDay(d)}
                               style={{
-                                height: 36, display: "grid", placeItems: "center",
-                                fontSize: 13, fontWeight: isStart || isEnd ? 900 : 600,
+                                height: 38, display: "grid", placeItems: "center", border: "none", padding: 0,
+                                fontSize: 13, fontWeight: isStart || isEnd || isToday ? 900 : 600,
                                 borderRadius: isStart || isEnd ? "50%" : 0,
                                 background: isStart || isEnd ? activeColor : isInRange ? `${activeColor}25` : "transparent",
-                                color: isStart || isEnd ? "#fff" : isInRange ? activeColor : "#3D3558",
+                                color: isStart || isEnd ? "#fff" : isInRange ? activeColor : isToday ? activeColor : "#3D3558",
+                                textDecoration: isToday && !isStart && !isEnd ? "underline" : "none",
                                 cursor: "pointer",
                               }}
                             >
                               {d.getDate()}
-                            </div>
+                            </button>
                           );
                         })}
                       </div>
                     );
                   })()}
-                  {pickerDragStart && (
-                    <div style={{ textAlign: "center", marginTop: 12, fontSize: 12, color: "#A59DBD" }}>
-                      드래그해서 범위를 선택하세요
-                    </div>
-                  )}
+
+                  {/* 선택한 기간 + 버튼 */}
+                  {(() => {
+                    const fmt = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
+                    const label = !pickerDragStart
+                      ? "시작일을 눌러주세요"
+                      : !pickerDragEnd
+                      ? `${fmt(pickerDragStart)} ~ 종료일을 눌러주세요`
+                      : `${fmt(pickerDragStart)} ~ ${fmt(pickerDragEnd)}`;
+                    const apply = () => {
+                      if (!pickerDragStart) return;
+                      const s = new Date(pickerDragStart);
+                      const en = new Date(pickerDragEnd ?? pickerDragStart); // 하루만 고르면 그날 하루
+                      s.setHours(0, 0, 0, 0);
+                      en.setHours(23, 59, 59, 999);
+                      setCustomRange({ start: s, end: en });
+                      setShowDatePicker(false);
+                    };
+                    return (
+                      <div style={{ marginTop: 14 }}>
+                        <div style={{ textAlign: "center", fontSize: 13, fontWeight: 800, color: pickerDragStart ? activeColor : "#A59DBD", marginBottom: 10 }}>
+                          {label}
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8 }}>
+                          <button
+                            type="button"
+                            onClick={() => { setCustomRange(null); setPickerDragStart(null); setPickerDragEnd(null); setShowDatePicker(false); }}
+                            style={{ height: 44, borderRadius: 14, border: "1.5px solid #E8E1F5", background: "#FAFAFF", color: "#A59DBD", fontWeight: 800, fontSize: 13, cursor: "pointer" }}
+                          >
+                            초기화
+                          </button>
+                          <button
+                            type="button"
+                            onClick={apply}
+                            disabled={!pickerDragStart}
+                            style={{ height: 44, borderRadius: 14, border: "none", background: pickerDragStart ? activeColor : "#E8E1F5", color: "#fff", fontWeight: 900, fontSize: 14, cursor: pickerDragStart ? "pointer" : "default" }}
+                          >
+                            조회
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}
@@ -821,6 +919,26 @@ function TransactionsContent() {
 
           {viewMode === "CALENDAR" ? (
             <>
+              {/* 기간 선택 중 안내 */}
+              {rangePendingStart && (
+                <div style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+                  padding: "10px 14px", borderRadius: 16,
+                  background: `${theme.colors.primary}14`, border: `1.5px solid ${theme.colors.primary}55`,
+                  fontSize: 12, fontWeight: 800, color: theme.colors.primary,
+                }}>
+                  <span>
+                    {Number(rangePendingStart.slice(5, 7))}/{Number(rangePendingStart.slice(8, 10))}부터 · 종료일을 눌러주세요 (‹ › 로 달 이동 가능)
+                  </span>
+                  <button
+                    onClick={() => { setRangePendingStart(null); setSelectedRange(null); }}
+                    style={{ border: "none", background: "none", color: "#A59DBD", fontWeight: 800, fontSize: 12, cursor: "pointer", flexShrink: 0 }}
+                  >
+                    취소
+                  </button>
+                </div>
+              )}
+
               {/* 달력 카드 */}
               <div style={{
                 background: "white", borderRadius: 24,
@@ -841,16 +959,23 @@ function TransactionsContent() {
                     if (!day) return <div key={`blank-${idx}`} style={{ minHeight: 62, borderTop: "1px solid #F0EBF9" }} />;
                     const dayKey = toLocalDateKey(day);
                     const summary = getDaySummary(day);
-                    const activeDay = selectedDay === dayKey;
+                    const inRange = !!selectedRange && dayKey >= selectedRange.start && dayKey <= selectedRange.end;
+                    const isRangeEdge = !!selectedRange && (dayKey === selectedRange.start || dayKey === selectedRange.end);
+                    const activeDay = selectedDay === dayKey || inRange;
                     const isToday = dayKey === todayKey;
                     return (
                       <button
                         key={dayKey}
-                        onClick={() => { setSelectedDay(activeDay ? null : dayKey); setDayDetailFilter("ALL"); }}
+                        onClick={() => handleCalendarDayClick(dayKey)}
+                        onTouchStart={() => startLongPress(dayKey)}
+                        onTouchMove={cancelLongPress}
+                        onTouchEnd={cancelLongPress}
+                        onContextMenu={(e) => e.preventDefault()}
                         style={{
+                          WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none",
                           width: "100%", minHeight: 62, padding: "4px 3px",
                           borderTop: "1px solid #F0EBF9", borderLeft: "none", borderRight: "none", borderBottom: "none",
-                          background: activeDay ? "#F4EFFE" : "white",
+                          background: isRangeEdge ? "#E6DBFD" : activeDay ? "#F4EFFE" : "white",
                           cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2,
                           borderRadius: 0,
                           outline: isToday ? `2px solid ${theme.colors.primary}` : "none",
@@ -883,8 +1008,81 @@ function TransactionsContent() {
                 </div>
               </div>
 
+              {/* 선택된 기간 거래 */}
+              {selectedRange && !rangePendingStart && (() => {
+                const typeColors: Record<string, string> = { INCOME: "#4CD6A5", EXPENSE: "#FF6B81", TRANSFER: "#5BB8F5", STOCK: "#F59E0B" };
+                const visibleTxs = dayDetailFilter === "ALL"
+                  ? selectedRangeTransactions
+                  : dayDetailFilter === "STOCK"
+                  ? selectedRangeTransactions.filter((tx) => tx.category?.includes("주식 매수") || tx.category?.includes("주식 매도"))
+                  : selectedRangeTransactions.filter((tx) => tx.type === dayDetailFilter);
+                const income = selectedRangeTransactions.filter((t) => t.type === "INCOME").reduce((s, t) => s + Number(t.amount), 0);
+                const expense = selectedRangeTransactions.filter((t) => t.type === "EXPENSE").reduce((s, t) => s + Number(t.amount), 0);
+                const label = (k: string) => `${k.slice(5, 7)}/${k.slice(8, 10)}`;
+                return (
+                  <div style={{
+                    background: "white", borderRadius: 24,
+                    border: "1px solid #EDE6F9",
+                    boxShadow: "0 4px 16px rgba(167,139,250,0.08)",
+                    overflow: "hidden",
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px 6px" }}>
+                      <strong style={{ fontSize: 14, fontWeight: 900, color: "#2D2545" }}>
+                        {label(selectedRange.start)} ~ {label(selectedRange.end)} 기간내역
+                      </strong>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#B0A8C8" }}>{selectedRangeTransactions.length}건</span>
+                        <button onClick={() => setSelectedRange(null)} style={{ border: "none", background: "none", cursor: "pointer", padding: 0, display: "grid", placeItems: "center" }}>
+                          <X size={16} color="#B0A8C8" />
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 12, padding: "0 18px 10px", fontSize: 12, fontWeight: 800 }}>
+                      <span style={{ color: "#10B981" }}>수입 +{income.toLocaleString()}원</span>
+                      <span style={{ color: "#FF3B70" }}>지출 -{expense.toLocaleString()}원</span>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "center", gap: 6, padding: "0 18px 10px" }}>
+                      {(["ALL", "INCOME", "EXPENSE", "TRANSFER", "STOCK"] as const).map((f) => {
+                        const labels = { ALL: "전체", INCOME: "수입", EXPENSE: "지출", TRANSFER: "이체", STOCK: "주식" };
+                        const color = f === "ALL" ? theme.colors.primary : typeColors[f];
+                        const active = dayDetailFilter === f;
+                        return (
+                          <button key={f} onClick={() => setDayDetailFilter(f)} style={{
+                            height: 26, padding: "0 11px", borderRadius: 999,
+                            fontSize: 11, fontWeight: 800, cursor: "pointer",
+                            border: active ? `1.5px solid ${color}` : "1.5px solid #E8E1F5",
+                            background: active ? `${color}18` : "#FAFAFF",
+                            color: active ? color : "#B0A8C8",
+                            transition: "all 0.15s",
+                          }}>{labels[f]}</button>
+                        );
+                      })}
+                    </div>
+
+                    <div style={{ borderTop: "1px solid #F0EBF9" }} />
+
+                    {visibleTxs.length === 0 ? (
+                      <div style={{ padding: "24px", textAlign: "center", fontSize: 13, color: "#C4B8D8" }}>거래내역이 없습니다</div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        {visibleTxs.map((tx, i) => (
+                          <TxRow key={tx.id} tx={tx} serverCategories={serverCategories}
+                            getTypeColor={getTypeColor} formatAmount={formatAmount}
+                            getAccountText={getAccountText} formatDateShort={formatDateShort}
+                            onPress={() => openEditSheet(tx)}
+                            divider={i < visibleTxs.length - 1}
+                            showDate
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* 선택된 날짜 거래 */}
-              {selectedDay && (() => {
+              {selectedDay && !selectedRange && (() => {
                 const visibleTxs = dayDetailFilter === "ALL"
                   ? selectedDayTransactions
                   : dayDetailFilter === "STOCK"
@@ -955,7 +1153,7 @@ function TransactionsContent() {
                 <div style={{
                   background: "white", borderRadius: 22, border: "1px solid #EDE6F9",
                   padding: "32px 20px", textAlign: "center", fontSize: 13, color: "#C4B8D8",
-                }}>해당 월의 거래내역이 없습니다</div>
+                }}>해당 기간의 거래내역이 없습니다</div>
               ) : (
                 <div style={{
                   background: "white", borderRadius: 24, border: "1px solid #EDE6F9",
