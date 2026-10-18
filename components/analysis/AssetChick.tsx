@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getBaseMonthByStartDay, getCustomMonthRange } from "@/components/lib/monthRange";
+import { buildChickLines, type ChickLine, type ChickTx, type Mood } from "@/components/analysis/chickLines";
 
 /**
  * 우리의 자산아리 🌱
@@ -19,12 +19,7 @@ const MAX_LEVEL = 50;
 const STEP = GOAL / MAX_LEVEL; // 레벨당 1,000만원
 const VARIANTS = 4;
 
-type Tx = {
-  type: "INCOME" | "EXPENSE" | "TRANSFER";
-  amount: number;
-  transactionAt: string;
-  category?: string | null;
-};
+type Tx = ChickTx;
 
 type Props = {
   totalAssets: number;
@@ -62,89 +57,22 @@ const tierOf = (level: number) => TIERS.find((t) => level >= t.from && level <= 
 const won = (v: number) =>
   v >= 100_000_000 ? `${(v / 100_000_000).toFixed(1)}억` : `${Math.round(v / 10_000).toLocaleString()}만`;
 
-/* ───────── 한줄평 ───────── */
-type Mood = "angry" | "happy" | "sad" | "neutral";
-type Line = { text: string; mood: Mood };
+/* ───────── 표정 ───────── */
 // 표정 이미지 번호: 1 화남 · 2 웃음 · 3 울음 · 4 무표정
 const MOOD_VARIANT: Record<Mood, number> = { angry: 1, happy: 2, sad: 3, neutral: 4 };
-const ADJUST_CATEGORIES = ["자산수정", "자산 수정"]; // 잔고 맞춤 기록은 소비로 안 봄
 
-function buildLines(
-  transactions: Tx[],
-  budgets: Record<string, number>,
-  monthStartDay: number,
-  level: number,
-  levelProgress: number
-): Line[] {
-  const now = new Date();
-  const cur = getCustomMonthRange(getBaseMonthByStartDay(now, monthStartDay), monthStartDay);
-  const prevBase = getBaseMonthByStartDay(new Date(cur.start.getTime() - 1), monthStartDay);
-  const prev = getCustomMonthRange(prevBase, monthStartDay);
-
-  // 지난달은 "이번 달과 같은 날짜까지"만 비교 (공정한 비교)
-  const elapsedMs = now.getTime() - cur.start.getTime();
-  const prevSamePoint = new Date(Math.min(prev.start.getTime() + elapsedMs, prev.end.getTime()));
-  const totalMs = cur.end.getTime() - cur.start.getTime();
-  const elapsedRatio = Math.min(Math.max(elapsedMs / totalMs, 0.03), 1);
-
-  const isExpense = (t: Tx) => t.type === "EXPENSE" && !ADJUST_CATEGORIES.includes(t.category || "");
-  const sum = (from: Date, to: Date, pred: (t: Tx) => boolean) =>
-    transactions.reduce((s, t) => {
-      const d = new Date(t.transactionAt);
-      return d >= from && d <= to && pred(t) ? s + Number(t.amount || 0) : s;
-    }, 0);
-  const cat = (name: string) => (t: Tx) => isExpense(t) && (t.category || "") === name;
-
-  const lines: Line[] = [];
-  const say = (text: string, mood: Mood) => lines.push({ text, mood });
-
-  // 오늘 식비
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayFood = sum(todayStart, now, cat("식비"));
-  if (now.getHours() >= 14 && todayFood === 0) say("오늘은 식비를 많이 아껴서 인내심을 많이 키웠어.", "happy");
-
-  // 식비 (이번 달 vs 지난달 같은 시점)
-  const foodNow = sum(cur.start, now, cat("식비"));
-  const foodPrev = sum(prev.start, prevSamePoint, cat("식비"));
-  if (foodPrev > 0 && foodNow < foodPrev * 0.85) say("지난달보다 식비를 아껴서 인내심이 쑥쑥 자랐어.", "happy");
-  if (foodPrev > 0 && foodNow > foodPrev * 1.2) say("요즘 맛있는 걸 많이 먹어서 배가 빵빵해.", "neutral");
-
-  // 공과금
-  const billNow = sum(cur.start, now, cat("공과금"));
-  const billPrev = sum(prev.start, prevSamePoint, cat("공과금"));
-  if (billPrev > 0 && billNow > billPrev * 1.1) say("저번달 대비 많은 공과금을 내서 조금 피곤해.", "sad");
-  if (billPrev > 0 && billNow < billPrev * 0.9) say("공과금이 지난달보다 덜 나와서 몸이 가벼워.", "happy");
-
-  // 예산
-  const budgetEntries = Object.entries(budgets || {}).filter(([, v]) => Number(v) > 0);
-  if (budgetEntries.length > 0) {
-    const over = budgetEntries.filter(([name, b]) => sum(cur.start, now, cat(name)) > Number(b));
-    const totalBudget = budgetEntries.reduce((s, [, b]) => s + Number(b), 0);
-    const totalSpent = budgetEntries.reduce((s, [name]) => s + sum(cur.start, now, cat(name)), 0);
-    if (over.length > 0) {
-      say(`${over[0][0]} 예산을 넘겨서 체력이 조금 떨어졌어.`, "angry");
-    } else if (totalSpent <= totalBudget * elapsedRatio) {
-      say("이번달은 예산 내로 생활비를 써서 지능이 올랐어.", "happy");
-    }
+// 상태 리액션·조언을 인사/잡담보다 3배 자주 고름 (직전과 같은 상황은 피함)
+function pickLine(lines: ChickLine[], exclude: number | null) {
+  const weights: number[] = lines.map((l, i) => (i === exclude && lines.length > 1 ? 0 : l.kind === "idle" ? 1 : 3));
+  const sumW = weights.reduce((x, y) => x + y, 0);
+  let r = Math.random() * sumW;
+  let idx = 0;
+  for (let i = 0; i < lines.length; i++) {
+    r -= weights[i];
+    if (r <= 0) { idx = i; break; }
   }
-
-  // 수입 vs 지출
-  const incNow = sum(cur.start, now, (t) => t.type === "INCOME" && !ADJUST_CATEGORIES.includes(t.category || ""));
-  const expNow = sum(cur.start, now, isExpense);
-  const expPrev = sum(prev.start, prevSamePoint, isExpense);
-  if (incNow > expNow && incNow > 0) say("이번달은 쓴 것보다 번 게 많아서 몸집이 커졌어.", "happy");
-  if (expPrev > 0 && expNow > expPrev * 1.15) say("지난달보다 지출 속도가 빨라서 숨이 조금 차.", "sad");
-  if (expPrev > 0 && expNow < expPrev * 0.85) say("지난달보다 덜 써서 마음이 든든해.", "happy");
-
-  // 레벨
-  if (level < MAX_LEVEL && levelProgress >= 0.9) say("다음 레벨까지 거의 다 왔어! 조금만 더!", "happy");
-  if (level >= MAX_LEVEL) say("목표 달성! 우리 이제 황금 병아리야.", "happy");
-
-  if (lines.length === 0) {
-    say("오늘도 차곡차곡 자라는 중이야.", "neutral");
-    say(`${level}레벨 병아리, 오늘도 열심히 모으는 중!`, "neutral");
-  }
-  return lines;
+  const textIdx = Math.floor(Math.random() * lines[idx].texts.length);
+  return { idx, textIdx };
 }
 
 /* ───────── 컴포넌트 ───────── */
@@ -157,19 +85,29 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
   const tier = tierOf(level);
 
   const lines = useMemo(
-    () => buildLines(transactions, budgets, monthStartDay, level, levelProgress),
-    [transactions, budgets, monthStartDay, level, levelProgress]
+    () =>
+      buildChickLines({
+        transactions,
+        budgets,
+        monthStartDay,
+        level,
+        maxLevel: MAX_LEVEL,
+        levelProgress,
+        toNextLevel: Math.max(nextAmount - safeAssets, 0),
+      }),
+    [transactions, budgets, monthStartDay, level, levelProgress, nextAmount, safeAssets]
   );
 
   // 무작위 값은 화면이 뜬 뒤에 정해야 서버/클라이언트 불일치가 없음
-  const [lineIndex, setLineIndex] = useState<number | null>(null);
+  const [pickState, setPickState] = useState<{ idx: number; textIdx: number } | null>(null);
   const [tries, setTries] = useState(0);
   useEffect(() => {
-    setLineIndex(Math.floor(Math.random() * lines.length));
+    setPickState(pickLine(lines, null));
     setTries(0);
-  }, [lines.length, level]);
+  }, [lines]);
 
-  const line = lineIndex === null ? null : lines[lineIndex] ?? lines[0];
+  const line = pickState ? lines[pickState.idx] ?? lines[0] : null;
+  const lineText = line ? line.texts[pickState!.textIdx % line.texts.length] : null;
   // 기분에 맞는 표정 번호부터 시작, 이미지가 없으면 다음 번호로
   const baseVariant = line ? MOOD_VARIANT[line.mood] : null;
   const variant = baseVariant ? ((baseVariant - 1 + tries) % VARIANTS) + 1 : null;
@@ -178,9 +116,8 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
   const onImgError = () => setTries((t) => t + 1);
 
   const nextLine = () => {
-    if (lines.length <= 1) return;
     setTries(0);
-    setLineIndex((i) => ((i ?? 0) + 1 + Math.floor(Math.random() * (lines.length - 1))) % lines.length);
+    setPickState((p) => pickLine(lines, p?.idx ?? null));
   };
 
   const dark = tier.from === 47;
@@ -343,7 +280,7 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
 
       {/* 한줄평 말풍선 */}
       <div
-        key={lineIndex ?? -1}
+        key={`${pickState?.idx ?? -1}-${pickState?.textIdx ?? -1}`}
         onClick={nextLine}
         style={{
           position: "relative",
@@ -373,7 +310,12 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
             transform: "translateX(-50%) rotate(45deg)",
           }}
         />
-        🐥 {line?.text ?? "..."}
+        {line?.kind === "advice" && (
+          <span style={{ display: "inline-block", marginRight: 6, padding: "1px 7px", borderRadius: 999, background: "#FFE9A8", color: "#8A6200", fontSize: 10, fontWeight: 900, verticalAlign: 1 }}>
+            조언
+          </span>
+        )}
+        {lineText ?? "..."}
       </div>
 
       {/* 레벨 진행 */}
