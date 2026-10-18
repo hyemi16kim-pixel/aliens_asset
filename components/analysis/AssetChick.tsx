@@ -4,20 +4,22 @@ import { useEffect, useMemo, useState } from "react";
 import { buildChickLines, type ChickLine, type ChickTx, type Mood } from "@/components/analysis/chickLines";
 
 /**
- * 우리의 자산아리 🌱
+ * 우리의 외계인 👽 — 영웅 5명 키우기
  *
  * - 목표 자산(5억)을 50단계로 나눠 레벨 1~50 (1레벨 = 1,000만원)
- * - 진화 단계·연출 강도는 「병아리 레벨별 외형 설계 LV6-50」 엑셀 기준
- *   (LV.1~5는 엑셀 범위 밖이라 '아기 병아리'로 둠)
- * - 이미지: public/chicks/lvNN_1~5.png  (1 화남 · 2 웃음 · 3 울음 · 4 무표정 · 5 놀람)
- *   해당되는 한줄평 중 하나를 무작위로 고르고, 그 기분에 맞는 표정을 보여줌
- *   그 표정 이미지가 없으면 비슷한 표정 → 무표정 순으로 대신하고, 하나도 없으면 🐣
- * - 이미지 안에도 오라가 그려지므로, 화면 효과는 배경 무대 역할로 은은하게 깔아줌
+ * - 10레벨마다 새 영웅이 착륙: 1번 LV.1~10 · 2번 LV.11~20 · 3번 LV.21~30 · 4번 LV.31~40 · 5번 LV.41~50
+ * - 레벨마다 모습이 한 단계씩 바뀜 (외계인마을 폴더 lv1~lv20 이미지)
+ * - 이미지: public/aliens/lvNN_{mood}.webp   (NN = 01, 02 … 20)
+ *   mood: happy 웃음 · surprised 놀람 · neutral 무표정 · sad 울음 · angry 화남
+ * - LV.21 이후는 아직 디자인 미정 → 🛸 + "???"로 표시
+ *   새 이미지를 넣으면 READY_LEVEL 숫자와 LEVEL_NAMES 이름만 늘려주면 됨
+ * - 배경: public/aliens/bg_village.jpg (외계인 마을)
  */
 
 const GOAL = 500_000_000; // 목표 5억
 const MAX_LEVEL = 50;
 const STEP = GOAL / MAX_LEVEL; // 레벨당 1,000만원
+const READY_LEVEL = 20; // 이미지가 준비된 마지막 레벨
 
 type Props = {
   totalAssets: number;
@@ -26,48 +28,58 @@ type Props = {
   monthStartDay: number;
 };
 
-/* ───────── 진화 단계 (엑셀 '진화 단계표') ───────── */
-type Stage = {
+/* ───────── 레벨별 이름 (실제 이미지 외형 기준) ───────── */
+const LEVEL_NAMES: Record<number, string> = {
+  // 1번 영웅 — 탐험가 → 기사
+  1: "아기 외계인", // 맨몸 + 작은 가방
+  2: "꼬마 탐험가", // 새싹 배지 가방 + 두루마리
+  3: "스카프 탐험가", // 파란 스카프 + 벨트
+  4: "망토 탐험가", // 짧은 망토 + 새싹
+  5: "별배지 정찰병", // 별 배지 + 나침반
+  6: "깃발 정찰대장", // 등에 깃발
+  7: "견습 기사", // 금빛 더듬이 캡 + 갑옷 부츠
+  8: "왕관 기사", // 보석 왕관 + 갑옷 망토
+  9: "푸른별 기사", // 파란 보주 더듬이
+  10: "은하 수호기사", // 작은 날개 + 크리스털 장식
+  // 2번 영웅 — 책벌레 → 대마법사
+  11: "꼬마 책벌레", // 작은 책 + 스카프
+  12: "견습 학자", // 책 + 두루마리 + 짧은 망토
+  13: "견습 마법사", // 마법사 모자 등장
+  14: "초급 마법사", // 장식 달린 모자
+  15: "별빛 마법사", // 별 무늬 모자·로브
+  16: "보주 마법사", // 모자 벗고 파란 보주 더듬이
+  17: "왕관 마법사", // 보석 왕관 + 마법 카드
+  18: "성운 마법사", // 보석 모자 + 크리스털 장식
+  19: "대마법사", // 별 보석 모자 + 보주 지팡이
+  20: "은하 대마법사", // 화려한 왕관 모자 + 지팡이
+};
+
+/* ───────── 영웅 5명 ───────── */
+type Hero = {
+  no: number;
   from: number;
   to: number;
-  title: string;
-  bg: string; // 무대 배경
-  glow: string; // 병아리 뒤 오라 색
-  particle: string; // 떠오르는 파티클: 이모지 또는 "dot"
-  particleColor?: string;
-  floorRings: number; // 발밑 빛 링 겹수
-  floorColor: string;
-  pulse?: string; // 퍼져나가는 파동 색
-  ring?: string; // 회전 광륜 (conic-gradient)
-  pillars?: boolean; // 빛기둥
+  cls: string; // 계열 이름 (미정이면 "???")
+  tint: string; // 배경 위에 살짝 얹는 색
+  glow: string; // 캐릭터 뒤 오라 색
+  accent: string; // 링·파동·빛 입자 색
+  particles: [string, string]; // [초반, 후반(6레벨차~)] 이모지 또는 "dot"
 };
 
-const STAGES: Stage[] = [
-  { from: 1, to: 5, title: "아기 병아리", bg: "linear-gradient(180deg,#FFF9E8 0%,#FFF1CC 100%)", glow: "rgba(255,214,102,0.5)", particle: "✨", floorRings: 0, floorColor: "rgba(255,200,80,0.6)" },
-  { from: 6, to: 10, title: "초급 성장", bg: "linear-gradient(180deg,#F6FFE9 0%,#FFF3D2 100%)", glow: "rgba(190,235,130,0.5)", particle: "dot", particleColor: "#B8E986", floorRings: 1, floorColor: "rgba(255,205,80,0.65)" },
-  { from: 11, to: 15, title: "숙련 탐험", bg: "linear-gradient(180deg,#FFF8E6 0%,#FBE9C4 100%)", glow: "rgba(255,205,90,0.55)", particle: "✨", floorRings: 2, floorColor: "rgba(255,195,60,0.7)" },
-  { from: 16, to: 20, title: "정찰 대원", bg: "linear-gradient(180deg,#F3F8EC 0%,#FBE8C2 100%)", glow: "rgba(255,200,70,0.6)", particle: "dot", particleColor: "#FFD24A", floorRings: 2, floorColor: "rgba(255,190,50,0.75)" },
-  { from: 21, to: 25, title: "전투 입문", bg: "linear-gradient(180deg,#FFF6E0 0%,#F6DFB0 100%)", glow: "rgba(255,190,50,0.65)", particle: "✨", floorRings: 3, floorColor: "rgba(255,180,40,0.8)", pulse: "rgba(255,200,70,0.7)" },
-  { from: 26, to: 30, title: "숙련 전사", bg: "linear-gradient(180deg,#EEF4FF 0%,#FBEBC8 100%)", glow: "rgba(120,170,255,0.55)", particle: "dot", particleColor: "#8AB8FF", floorRings: 3, floorColor: "rgba(255,190,60,0.8)", pulse: "rgba(110,160,255,0.7)" },
-  { from: 31, to: 35, title: "정예 기사", bg: "linear-gradient(180deg,#EAF1FF 0%,#FFE6D2 100%)", glow: "rgba(100,150,255,0.6)", particle: "dot", particleColor: "#FF8A3D", floorRings: 3, floorColor: "rgba(255,170,60,0.8)", pulse: "rgba(110,160,255,0.75)" },
-  { from: 36, to: 40, title: "화염 영웅", bg: "linear-gradient(180deg,#FFF0E4 0%,#FFD3B4 100%)", glow: "rgba(255,110,40,0.7)", particle: "🔥", floorRings: 3, floorColor: "rgba(255,120,40,0.8)", ring: "conic-gradient(from 0deg, transparent 0 62%, rgba(255,120,40,0.9) 80%, rgba(255,200,80,0.9) 88%, transparent 100%)" },
-  { from: 41, to: 45, title: "천공 전설", bg: "linear-gradient(180deg,#FFFBEA 0%,#ECE6FF 100%)", glow: "rgba(255,225,120,0.8)", particle: "⭐", floorRings: 3, floorColor: "rgba(255,210,90,0.85)", ring: "conic-gradient(from 0deg, transparent 0 55%, rgba(255,230,140,0.95) 75%, rgba(160,200,255,0.9) 85%, transparent 100%)", pulse: "rgba(255,230,140,0.8)" },
-  { from: 46, to: 50, title: "불사조 신화", bg: "linear-gradient(180deg,#FFF4DE 0%,#FFCF9E 100%)", glow: "rgba(255,150,40,0.85)", particle: "🔥", floorRings: 3, floorColor: "rgba(255,170,50,0.9)", ring: "repeating-conic-gradient(from 0deg, rgba(255,200,80,0.6) 0 8deg, transparent 8deg 22deg)", pulse: "rgba(255,170,60,0.8)", pillars: true },
+const HEROES: Hero[] = [
+  { no: 1, from: 1, to: 10, cls: "기사", tint: "linear-gradient(180deg,#F1FFE4 0%,#EAF2FF 100%)", glow: "rgba(170,230,120,0.55)", accent: "rgba(110,170,255,0.8)", particles: ["dot", "⭐"] },
+  { no: 2, from: 11, to: 20, cls: "마법사", tint: "linear-gradient(180deg,#EFEAFF 0%,#E6F0FF 100%)", glow: "rgba(160,140,255,0.6)", accent: "rgba(140,120,255,0.8)", particles: ["✨", "🌟"] },
+  { no: 3, from: 21, to: 30, cls: "???", tint: "linear-gradient(180deg,#F3FFF6 0%,#EAF6FF 100%)", glow: "rgba(140,220,200,0.55)", accent: "rgba(110,210,190,0.8)", particles: ["dot", "✨"] },
+  { no: 4, from: 31, to: 40, cls: "???", tint: "linear-gradient(180deg,#FFF6EA 0%,#FFEDE6 100%)", glow: "rgba(255,190,120,0.6)", accent: "rgba(255,170,100,0.8)", particles: ["dot", "✨"] },
+  { no: 5, from: 41, to: 50, cls: "???", tint: "linear-gradient(180deg,#FFFBEA 0%,#EDE6FF 100%)", glow: "rgba(255,220,120,0.7)", accent: "rgba(255,210,100,0.85)", particles: ["⭐", "💎"] },
 ];
 
-const stageOf = (level: number) => STAGES.find((s) => level >= s.from && level <= s.to) || STAGES[0];
+const heroOf = (level: number) => HEROES.find((h) => level >= h.from && level <= h.to) || HEROES[0];
+const nameOf = (level: number) => LEVEL_NAMES[level] ?? "???";
+const alienSrc = (level: number, mood: Mood) =>
+  level <= READY_LEVEL ? `/aliens/lv${String(level).padStart(2, "0")}_${mood}.webp` : null;
 
-// 엑셀 '연출 강도' (LV.6~50). LV.1~5는 1
-const INTENSITY: Record<number, number> = {
-  6: 1, 7: 1, 8: 2, 9: 2, 10: 2, 11: 2, 12: 2, 13: 3, 14: 3, 15: 3, 16: 3, 17: 3,
-  18: 4, 19: 4, 20: 4, 21: 4, 22: 4, 23: 5, 24: 5, 25: 5, 26: 5, 27: 5,
-  28: 6, 29: 6, 30: 6, 31: 6, 32: 6, 33: 7, 34: 7, 35: 7, 36: 7,
-  37: 8, 38: 8, 39: 8, 40: 8, 41: 8, 42: 8, 43: 9, 44: 9, 45: 9, 46: 9, 47: 9,
-  48: 10, 49: 10, 50: 10,
-};
-const intensityOf = (level: number) => INTENSITY[level] ?? 1;
-
-// "초급 성장" → "초급 성장으로", "천공 전설" → "천공 전설로" (받침 없거나 ㄹ이면 '로')
+// "꼬마 탐험가" → "꼬마 탐험가로" (받침 없거나 ㄹ이면 '로')
 const withRo = (word: string) => {
   const code = word.charCodeAt(word.length - 1);
   if (code < 0xac00 || code > 0xd7a3) return `${word}로`;
@@ -77,17 +89,6 @@ const withRo = (word: string) => {
 
 const won = (v: number) =>
   v >= 100_000_000 ? `${(v / 100_000_000).toFixed(1)}억` : `${Math.round(v / 10_000).toLocaleString()}만`;
-
-/* ───────── 표정 ───────── */
-// 이미지 번호: 1 화남 · 2 웃음 · 3 울음 · 4 무표정 · 5 놀람
-// 해당 표정 이미지가 없을 때 대신 쓸 순서
-const MOOD_FALLBACK: Record<Mood, number[]> = {
-  angry: [1, 4, 2],
-  happy: [2, 4],
-  sad: [3, 4],
-  neutral: [4, 2],
-  surprised: [5, 4, 2],
-};
 
 // 상태 리액션·조언을 인사/잡담보다 3배 자주 고름 (직전과 같은 상황은 피함)
 function pickLine(lines: ChickLine[], exclude: number | null) {
@@ -106,6 +107,44 @@ function pickLine(lines: ChickLine[], exclude: number | null) {
   return { idx, textIdx };
 }
 
+/* ───────── 영웅 슬롯 (아래 5칸) ───────── */
+function HeroSlot({ hero, level }: { hero: Hero; level: number }) {
+  const done = level > hero.to;
+  const current = level >= hero.from && level <= hero.to;
+  const shownLevel = done ? hero.to : current ? level : 0;
+  const src = shownLevel ? alienSrc(shownLevel, done ? "happy" : "neutral") : null;
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+
+  return (
+    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+      <div
+        style={{
+          width: 46,
+          height: 46,
+          borderRadius: "50%",
+          display: "grid",
+          placeItems: "center",
+          overflow: "hidden",
+          background: current ? "#F5FDEB" : done ? "#F1EDFF" : "#F2F0F7",
+          border: current ? "2px solid #9ED36A" : done ? "1.5px solid #C9BCFF" : "1.5px dashed #D6D0E6",
+          boxShadow: current ? "0 0 0 3px rgba(158,211,106,0.25)" : "none",
+        }}
+      >
+        {src && !failed ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={src} alt={`${hero.no}번째 영웅`} onError={() => setFailed(true)} style={{ width: "118%", height: "118%", objectFit: "contain", marginTop: 6 }} />
+        ) : (
+          <span style={{ fontSize: shownLevel ? 22 : 15, color: "#C4BCD8", fontWeight: 900 }}>{shownLevel ? "🛸" : "?"}</span>
+        )}
+      </div>
+      <span style={{ fontSize: 9, fontWeight: 800, color: current ? "#4C7A12" : done ? "#7C5CFF" : "#B8B0CC", whiteSpace: "nowrap" }}>
+        {done ? "수련 완료" : current ? `${hero.no}번 · ${hero.cls}` : `LV.${hero.from}`}
+      </span>
+    </div>
+  );
+}
+
 /* ───────── 컴포넌트 ───────── */
 export default function AssetChick({ totalAssets, transactions, budgets, monthStartDay }: Props) {
   const safeAssets = Math.max(totalAssets, 0);
@@ -113,9 +152,18 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
   const levelBase = (level - 1) * STEP;
   const levelProgress = level >= MAX_LEVEL ? 1 : (safeAssets - levelBase) / STEP;
   const nextAmount = level * STEP;
-  const stage = stageOf(level);
-  const nextStage = STAGES.find((s) => s.from > level);
-  const intensity = intensityOf(level);
+  const hero = heroOf(level);
+  const step = level - hero.from + 1; // 이 영웅 안에서 몇 번째 단계인지 (1~10)
+  const levelName = nameOf(level);
+
+  // 연출: 영웅 안에서 단계가 오를수록 화려해짐
+  const fx = {
+    floorRings: step >= 7 ? 3 : step >= 5 ? 2 : step >= 3 ? 1 : 0,
+    pulse: step >= 5,
+    ring: step >= 8,
+    beams: step >= 10,
+    particle: step >= 6 ? hero.particles[1] : hero.particles[0],
+  };
 
   const lines = useMemo(
     () =>
@@ -133,40 +181,44 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
 
   // 무작위 값은 화면이 뜬 뒤에 정해야 서버/클라이언트 불일치가 없음
   const [pickState, setPickState] = useState<{ idx: number; textIdx: number } | null>(null);
-  const [tries, setTries] = useState(0);
+  const [imageFailed, setImageFailed] = useState(false);
   useEffect(() => {
     setPickState(pickLine(lines, null));
-    setTries(0);
+    setImageFailed(false);
   }, [lines]);
 
   const line = pickState ? lines[pickState.idx] ?? lines[0] : null;
   const lineText = line && pickState ? line.texts[pickState.textIdx % line.texts.length] : null;
-  const candidates = line ? MOOD_FALLBACK[line.mood] : [];
-  const variant = candidates[tries] ?? null;
-  const imageFailed = !!line && tries >= candidates.length;
-  const src = variant ? `/chicks/lv${String(level).padStart(2, "0")}_${variant}.png` : null;
-  const onImgError = () => setTries((t) => t + 1);
+  const src = line ? alienSrc(level, line.mood) : null;
 
   const nextLine = () => {
-    setTries(0);
+    setImageFailed(false);
     setPickState((p) => pickLine(lines, p?.idx ?? null));
   };
 
-  // 연출 강도(1~10)에 따라 파티클 수·오라 세기 조절
-  const particleCount = 3 + Math.round(intensity * 0.8);
-  const glowScale = 0.75 + intensity * 0.035;
+  // 다음 단계 안내
+  const nextInfo = (() => {
+    if (level >= MAX_LEVEL) return "영웅 5명 수련 완료!";
+    const next = level + 1;
+    if (next > hero.to) return `LV.${next}에서 ${hero.no + 1}번째 영웅 착륙`;
+    if (LEVEL_NAMES[next]) return `LV.${next}에서 ${withRo(LEVEL_NAMES[next])} 진화`;
+    return `LV.${next} 모습은 준비 중`;
+  })();
+
+  const particleCount = 3 + Math.round(step * 0.8);
+  const glowScale = 0.75 + step * 0.035;
   const particles = Array.from({ length: particleCount }, (_, i) => i);
 
   return (
     <div>
       <style>{`
-        @keyframes chickBob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
-        @keyframes chickGlow { 0%,100% { opacity: .65; transform: translate(-50%,-50%) scale(.92) } 50% { opacity: 1; transform: translate(-50%,-50%) scale(1.06) } }
-        @keyframes chickRing { from { transform: translate(-50%,-50%) rotate(0deg) } to { transform: translate(-50%,-50%) rotate(360deg) } }
-        @keyframes chickFloat { 0% { transform: translateY(0) scale(.7); opacity: 0 } 15% { opacity: 1 } 100% { transform: translateY(-120px) scale(1.05); opacity: 0 } }
-        @keyframes chickPulse { 0% { transform: translate(-50%,-50%) scale(.5); opacity: .9 } 100% { transform: translate(-50%,-50%) scale(1.35); opacity: 0 } }
-        @keyframes chickFloor { 0%,100% { opacity: .55 } 50% { opacity: 1 } }
-        @keyframes chickPillar { 0%,100% { opacity: .35; transform: scaleY(.9) } 50% { opacity: .85; transform: scaleY(1.05) } }
+        @keyframes alienBob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
+        @keyframes alienGlow { 0%,100% { opacity: .65; transform: translate(-50%,-50%) scale(.92) } 50% { opacity: 1; transform: translate(-50%,-50%) scale(1.06) } }
+        @keyframes alienRing { from { transform: translate(-50%,-50%) rotate(0deg) } to { transform: translate(-50%,-50%) rotate(360deg) } }
+        @keyframes alienFloat { 0% { transform: translateY(0) scale(.7); opacity: 0 } 15% { opacity: 1 } 100% { transform: translateY(-120px) scale(1.05); opacity: 0 } }
+        @keyframes alienPulse { 0% { transform: translate(-50%,-50%) scale(.5); opacity: .9 } 100% { transform: translate(-50%,-50%) scale(1.35); opacity: 0 } }
+        @keyframes alienFloor { 0%,100% { opacity: .55 } 50% { opacity: 1 } }
+        @keyframes alienBeam { 0%,100% { opacity: .35; transform: scaleY(.9) } 50% { opacity: .85; transform: scaleY(1.05) } }
         @keyframes bubbleIn { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: translateY(0) } }
       `}</style>
 
@@ -177,18 +229,19 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
           height: 220,
           borderRadius: 20,
           overflow: "hidden",
-          // 초원 배경 + (이미지 로딩 전/실패 시) 단계 색
-          background: `url(/chicks/bg_meadow.jpg) center 62% / cover no-repeat, ${stage.bg}`,
+          // 외계인 마을 배경 + (이미지 로딩 전/실패 시) 영웅 색
+          background: `url(/aliens/bg_village.jpg) center 70% / cover no-repeat, ${hero.tint}`,
           marginTop: 12,
         }}
       >
-        {/* 진화 단계 색을 살짝 얹어 분위기만 바꿈 */}
-        <div style={{ position: "absolute", inset: 0, background: stage.bg, opacity: stage.from >= 31 ? 0.28 : 0.12, pointerEvents: "none" }} />
-        {/* 빛기둥 (불사조 신화) */}
-        {stage.pillars &&
+        {/* 영웅 색을 살짝 얹어 분위기만 바꿈 */}
+        <div style={{ position: "absolute", inset: 0, background: hero.tint, opacity: 0.12 + step * 0.012, pointerEvents: "none" }} />
+
+        {/* 텔레포트 빔 (각 영웅의 마지막 단계) */}
+        {fx.beams &&
           [18, 36, 64, 82].map((left, i) => (
             <span
-              key={`p${i}`}
+              key={`b${i}`}
               style={{
                 position: "absolute",
                 left: `${left}%`,
@@ -196,10 +249,10 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
                 width: 14,
                 height: "100%",
                 marginLeft: -7,
-                background: "linear-gradient(0deg, rgba(255,190,70,0.75) 0%, rgba(255,230,150,0.25) 70%, transparent 100%)",
+                background: `linear-gradient(0deg, ${hero.accent} 0%, rgba(255,255,255,0.25) 70%, transparent 100%)`,
                 filter: "blur(3px)",
                 transformOrigin: "bottom",
-                animation: `chickPillar ${2.4 + i * 0.3}s ease-in-out ${i * 0.4}s infinite`,
+                animation: `alienBeam ${2.4 + i * 0.3}s ease-in-out ${i * 0.4}s infinite`,
               }}
             />
           ))}
@@ -213,13 +266,13 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
             width: 170 * glowScale,
             height: 170 * glowScale,
             borderRadius: "50%",
-            background: `radial-gradient(circle, ${stage.glow} 0%, transparent 68%)`,
-            animation: "chickGlow 2.6s ease-in-out infinite",
+            background: `radial-gradient(circle, ${hero.glow} 0%, transparent 68%)`,
+            animation: "alienGlow 2.6s ease-in-out infinite",
           }}
         />
 
-        {/* 퍼지는 파동 */}
-        {stage.pulse &&
+        {/* 퍼지는 신호 파동 */}
+        {fx.pulse &&
           [0, 1].map((i) => (
             <div
               key={`w${i}`}
@@ -230,14 +283,14 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
                 width: 170,
                 height: 170,
                 borderRadius: "50%",
-                border: `2px solid ${stage.pulse}`,
-                animation: `chickPulse 2.8s ease-out ${i * 1.4}s infinite`,
+                border: `2px solid ${hero.accent}`,
+                animation: `alienPulse 2.8s ease-out ${i * 1.4}s infinite`,
               }}
             />
           ))}
 
         {/* 회전 광륜 */}
-        {stage.ring && (
+        {fx.ring && (
           <div
             style={{
               position: "absolute",
@@ -246,16 +299,16 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
               width: 178,
               height: 178,
               borderRadius: "50%",
-              background: stage.ring,
+              background: `conic-gradient(from 0deg, transparent 0 58%, ${hero.accent} 78%, rgba(255,220,120,0.9) 88%, transparent 100%)`,
               WebkitMask: "radial-gradient(circle, transparent 58%, #000 60%, #000 66%, transparent 68%)",
               mask: "radial-gradient(circle, transparent 58%, #000 60%, #000 66%, transparent 68%)",
-              animation: `chickRing ${stage.from === 46 ? 14 : 3.2}s linear infinite`,
+              animation: `alienRing ${fx.beams ? 8 : 3.2}s linear infinite`,
             }}
           />
         )}
 
-        {/* 발밑 빛 링 */}
-        {Array.from({ length: stage.floorRings }, (_, i) => (
+        {/* 발밑 착륙 링 */}
+        {Array.from({ length: fx.floorRings }, (_, i) => (
           <div
             key={`f${i}`}
             style={{
@@ -266,9 +319,9 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
               height: 18 + i * 5,
               marginLeft: -(48 + i * 13),
               borderRadius: "50%",
-              border: `2px solid ${stage.floorColor}`,
-              boxShadow: `0 0 10px ${stage.floorColor}`,
-              animation: `chickFloor ${2 + i * 0.4}s ease-in-out ${i * 0.3}s infinite`,
+              border: `2px solid ${hero.accent}`,
+              boxShadow: `0 0 10px ${hero.accent}`,
+              animation: `alienFloor ${2 + i * 0.4}s ease-in-out ${i * 0.3}s infinite`,
             }}
           />
         ))}
@@ -282,28 +335,28 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
               left: `${14 + ((i * 13) % 72)}%`,
               bottom: 12,
               fontSize: 13,
-              animation: `chickFloat ${2.8 + (i % 3) * 0.7}s ease-in ${i * 0.45}s infinite`,
+              animation: `alienFloat ${2.8 + (i % 3) * 0.7}s ease-in ${i * 0.45}s infinite`,
               pointerEvents: "none",
             }}
           >
-            {stage.particle === "dot" ? (
+            {fx.particle === "dot" ? (
               <span
                 style={{
                   display: "block",
                   width: 5,
                   height: 5,
                   borderRadius: "50%",
-                  background: stage.particleColor,
-                  boxShadow: `0 0 6px ${stage.particleColor}`,
+                  background: hero.accent,
+                  boxShadow: `0 0 6px ${hero.accent}`,
                 }}
               />
             ) : (
-              stage.particle
+              fx.particle
             )}
           </span>
         ))}
 
-        {/* 발밑 그림자 (풀밭에 서 있는 느낌) */}
+        {/* 발밑 그림자 */}
         <div
           style={{
             position: "absolute",
@@ -318,36 +371,36 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
           }}
         />
 
-        {/* 병아리 */}
+        {/* 외계인 */}
         <button
           type="button"
           onClick={nextLine}
-          aria-label="자산아리에게 말 걸기"
+          aria-label="외계인에게 교신하기"
           style={{
             position: "absolute",
             left: "50%",
             top: "52%",
             transform: "translate(-50%,-50%)",
-            width: 150,
-            height: 150,
+            width: 156,
+            height: 156,
             border: "none",
             background: "transparent",
             padding: 0,
             cursor: "pointer",
           }}
         >
-          <div style={{ width: "100%", height: "100%", animation: "chickBob 2.2s ease-in-out infinite", display: "grid", placeItems: "center" }}>
+          <div style={{ width: "100%", height: "100%", animation: "alienBob 2.2s ease-in-out infinite", display: "grid", placeItems: "center" }}>
             {src && !imageFailed ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 key={src}
                 src={src}
-                alt={`자산아리 LV.${level}`}
-                onError={onImgError}
-                style={{ width: "100%", height: "100%", objectFit: "contain", filter: "drop-shadow(0 6px 8px rgba(120,80,0,0.18))" }}
+                alt={`LV.${level} ${levelName}`}
+                onError={() => setImageFailed(true)}
+                style={{ width: "100%", height: "100%", objectFit: "contain", filter: "drop-shadow(0 6px 8px rgba(40,80,20,0.2))" }}
               />
             ) : (
-              <span style={{ fontSize: 76, lineHeight: 1 }}>🐣</span>
+              <span style={{ fontSize: 76, lineHeight: 1 }}>🛸</span>
             )}
           </div>
         </button>
@@ -361,13 +414,29 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
             padding: "4px 10px",
             borderRadius: 999,
             background: "rgba(45,37,69,0.82)",
-            color: "#FFE58A",
+            color: "#C9F27A",
             fontSize: 11,
             fontWeight: 900,
             letterSpacing: 0.3,
           }}
         >
-          LV.{level} · {stage.title}
+          LV.{level} · {levelName}
+        </div>
+        {/* 몇 번째 영웅인지 */}
+        <div
+          style={{
+            position: "absolute",
+            top: 10,
+            right: 10,
+            padding: "4px 9px",
+            borderRadius: 999,
+            background: "rgba(255,255,255,0.85)",
+            color: "#6B5BB5",
+            fontSize: 10,
+            fontWeight: 900,
+          }}
+        >
+          {hero.no}번째 영웅
         </div>
       </div>
 
@@ -380,11 +449,11 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
           margin: "12px 4px 0",
           padding: "11px 14px",
           borderRadius: 16,
-          background: "#FFFBEF",
-          border: "1.5px solid #F6E3A6",
+          background: "#F5FDEB",
+          border: "1.5px solid #CDEBA8",
           fontSize: 13,
           fontWeight: 700,
-          color: "#5C4A1E",
+          color: "#3F5A22",
           lineHeight: 1.45,
           animation: "bubbleIn .35s ease-out",
           cursor: "pointer",
@@ -397,9 +466,9 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
             left: "50%",
             width: 12,
             height: 12,
-            background: "#FFFBEF",
-            borderLeft: "1.5px solid #F6E3A6",
-            borderTop: "1.5px solid #F6E3A6",
+            background: "#F5FDEB",
+            borderLeft: "1.5px solid #CDEBA8",
+            borderTop: "1.5px solid #CDEBA8",
             transform: "translateX(-50%) rotate(45deg)",
           }}
         />
@@ -410,14 +479,14 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
               marginRight: 6,
               padding: "1px 7px",
               borderRadius: 999,
-              background: "#FFE9A8",
-              color: "#8A6200",
+              background: "#DDF3BE",
+              color: "#4C7A12",
               fontSize: 10,
               fontWeight: 900,
               verticalAlign: 1,
             }}
           >
-            조언
+            📡 조언
           </span>
         )}
         {lineText ?? "..."}
@@ -444,18 +513,23 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
             style={{
               height: "100%",
               width: `${Math.round(levelProgress * 100)}%`,
-              background: "linear-gradient(90deg, #FFC93C, #FF9F43)",
+              background: "linear-gradient(90deg, #B8E986, #6FD3B5)",
               borderRadius: 999,
               transition: "width 1.2s ease",
             }}
           />
         </div>
         <div style={{ marginTop: 5, display: "flex", justifyContent: "space-between", fontSize: 10, color: "#B0A8C8" }}>
-          <span>
-            {nextStage ? `LV.${nextStage.from}에서 ${withRo(nextStage.title)} 진화` : "최종 진화 완료"}
-          </span>
+          <span>{nextInfo}</span>
           <span>목표 5억 · 1레벨 1,000만원</span>
         </div>
+      </div>
+
+      {/* 영웅 5명 */}
+      <div style={{ marginTop: 14, padding: "10px 6px 8px", borderRadius: 16, background: "#FAF8FF", display: "flex", gap: 4 }}>
+        {HEROES.map((h) => (
+          <HeroSlot key={h.no} hero={h} level={level} />
+        ))}
       </div>
     </div>
   );
