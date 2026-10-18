@@ -30,6 +30,7 @@ type Account = {
   nextPaymentDate?: string | null;
   nextPaymentAmount?: number | null;
   nextMonthAmount?: number | null;
+  cardOutstanding?: number;
   maturityDate?: string | null;
   monthlyPayment?: number | null;
   displayOrder?: number;
@@ -231,15 +232,8 @@ export default function AssetAccountGrid({
     (sum, a) => sum + (stockMarketValues[a.id] ?? Number(a.stockCash || a.balance || 0)),
     0
   );
-  const isAfterPaymentDay = (cardPaymentDay?: number | null) => {
-    if (!cardPaymentDay) return false;
-    return new Date().getDate() >= cardPaymentDay;
-  };
   const debtTotal = debtAccounts.reduce((sum, a) => {
-    if (a.type === "CARD") {
-      const showNext = isAfterPaymentDay(a.cardPaymentDay);
-      return sum + Math.abs(Number(showNext ? (a.nextMonthAmount || 0) : (a.nextPaymentAmount || 0)));
-    }
+    if (a.type === "CARD") return sum + Number(a.cardOutstanding || 0);
     if (a.type === "LOAN") return sum + Math.abs(Number(a.balance || 0));
     return sum;
   }, 0);

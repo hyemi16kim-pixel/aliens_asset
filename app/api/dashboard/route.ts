@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/components/lib/prisma";
+import { getCardBills } from "@/components/lib/cardBilling";
 
 const clampDay = (year: number, monthIndex: number, day: number) => {
   const lastDay = new Date(year, monthIndex + 1, 0).getDate();
@@ -170,6 +171,15 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
+    // 카드 부채는 저장된 balance 대신 거래내역 기준 미결제 총액으로 계산
+    const cardBills = familyId
+      ? await getCardBills(familyId, accounts.filter((a: any) => a.type === "CARD"))
+      : new Map();
+    const debtOf = (account: any) =>
+      account.type === "CARD"
+        ? cardBills.get(account.id)?.outstanding ?? 0
+        : Math.abs(Number(account.balance || 0));
+
     // Account type asset calculation:
     // - STOCK: cash (stockCash) + stock holdings value (quantity x avgPrice)
     // - LOAN/CARD: debt accounts - subtract (balance is positive = borrowed amount)
@@ -186,7 +196,7 @@ export async function GET(req: NextRequest) {
       }
 
       if (account.type === "LOAN" || account.type === "CARD") {
-        return sum - Math.abs(Number(account.balance || 0));
+        return sum - debtOf(account);
       }
 
       return sum + Number(account.balance || 0);
@@ -198,8 +208,7 @@ export async function GET(req: NextRequest) {
         (account: any) => account.type === "LOAN" || account.type === "CARD"
       )
       .reduce(
-        (sum: number, account: any) =>
-          sum + Math.abs(Number(account.balance || 0)),
+        (sum: number, account: any) => sum + debtOf(account),
         0
       );
 

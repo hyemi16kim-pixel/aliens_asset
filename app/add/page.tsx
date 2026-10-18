@@ -128,8 +128,6 @@ const customIconMap = {
   ],
   TRANSFER: [
     { key: "이체", icon: ArrowLeftRight },
-    { key: "카드 전월 선결제", icon: CreditCard },
-    { key: "카드 이번달 선결제", icon: CreditCard },
   ],
   STOCK: [
     { key: "주식", icon: PiggyBank },
@@ -1456,10 +1454,6 @@ console.log("MATCH_DEBUG", {
                     type="button"
                     onClick={() => {
                       setCategory(item.name);
-                      // 카드 선결제 카테고리 벗어나면 toAccountId 초기화
-                      if (item.name !== "카드 전월 선결제" && item.name !== "카드 이번달 선결제") {
-                        setToAccountId("");
-                      }
                     }}
                     onTouchStart={() => {
                       // 커스텀 카테고리만 길게 누르기 활성화
@@ -1846,10 +1840,10 @@ console.log("MATCH_DEBUG", {
 
     {type === "TRANSFER" ? (
       <div style={{ display: "grid", gap: 10 }}>
-        {/* 카드 선결제 안내 */}
-        {(category === "카드 전월 선결제" || category === "카드 이번달 선결제") && (
+        {/* 카드 계좌로 보내면 결제 예정액에서 자동 차감 */}
+        {accounts.find((a: any) => String(a.id) === String(toAccountId))?.type === "CARD" && (
           <div style={{ padding: "8px 12px", borderRadius: 12, background: "#FFF7ED", border: "1px solid #FED7AA", fontSize: 11, color: "#F97316", fontWeight: 700 }}>
-            💳 {category === "카드 전월 선결제" ? "전월 카드 예상납부액에서 차감됩니다" : "이번달 카드 예상납부액에서 차감됩니다"}
+            💳 카드 결제 예정액에서 오래된 청구부터 차감됩니다
           </div>
         )}
         <AccountSelect
@@ -1860,13 +1854,9 @@ console.log("MATCH_DEBUG", {
           activeColor={activeColor}
         />
         <AccountSelect
-          label={category === "카드 전월 선결제" || category === "카드 이번달 선결제" ? "카드 계좌" : "입금"}
+          label="입금"
           value={toAccountId}
-          accounts={
-            category === "카드 전월 선결제" || category === "카드 이번달 선결제"
-              ? accounts.filter((a: any) => a.type === "CARD")
-              : accounts
-          }
+          accounts={accounts}
           onChange={setToAccountId}
           activeColor={activeColor}
         />

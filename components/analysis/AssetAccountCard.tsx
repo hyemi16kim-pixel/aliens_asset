@@ -18,6 +18,15 @@ type Account = {
   color?: string | null;
   nextPaymentAmount?: number | null;
   nextMonthAmount?: number | null;
+  cardBill?: {
+    dueDate: string;
+    dueAmount: number;
+    overdueAmount: number;
+    nextDueDate: string;
+    nextAmount: number;
+    credit: number;
+    outstanding: number;
+  } | null;
   maturityDate?: string | null;
   monthlyPayment?: number | null;
 };
@@ -37,17 +46,8 @@ const iconMap: Record<string, string> = {
 
 const money = (v: number) => `${Math.round(v).toLocaleString("ko-KR")}원`;
 
-const getCardPaymentLabel = (monthOffset: number, day?: number | null) => {
-  const today = new Date();
-  const target = new Date(today.getFullYear(), today.getMonth() + monthOffset, day || 1);
-  return `${String(target.getMonth() + 1).padStart(2, "0")}/${String(target.getDate()).padStart(2, "0")}`;
-};
-
-// 대금지급일 이후인지 여부 (같은 날 포함)
-const isAfterPaymentDay = (cardPaymentDay?: number | null) => {
-  if (!cardPaymentDay) return false;
-  return new Date().getDate() >= cardPaymentDay;
-};
+// "2026-10-22" → "10/22"
+const shortDate = (ymd?: string) => (ymd ? `${ymd.slice(5, 7)}/${ymd.slice(8, 10)}` : "--/--");
 
 const paletteColorMap: Record<string, string> = {
   "#F6F0FF": "#8B5CF6",
@@ -169,11 +169,7 @@ export default function AssetAccountCard({ account, users = [], onClick, onDoubl
         {account.type === "STOCK"
           ? (stockLoading ? "로딩 중..." : money(stockSummary?.totalValue || 0))
           : account.type === "CARD"
-          ? (() => {
-              // 대금지급일 이후면 다음달 기준으로 전환
-              const showNext = isAfterPaymentDay(account.cardPaymentDay);
-              return money(-(showNext ? (account.nextMonthAmount || 0) : (account.nextPaymentAmount || 0)));
-            })()
+          ? money(-(account.nextPaymentAmount || 0)) // 다음 결제일에 낼 금액 (미납 포함)
           : account.type === "LOAN"
           ? money(account.balance === 0 ? 0 : -Math.abs(account.balance))
           : money(account.balance)}
@@ -182,16 +178,22 @@ export default function AssetAccountCard({ account, users = [], onClick, onDoubl
       {/* 하단 상세 */}
       <div style={{ marginTop: 8, fontSize: 11, color: "#6F5C86", lineHeight: 1.5 }}>
         {account.type === "CARD" && (() => {
+          const bill = account.cardBill;
+          if (!bill) return null;
           return (
             <>
               <div>
-                {getCardPaymentLabel(0, account.cardPaymentDay)} 예상납부{" "}
-                {money(-(account.nextPaymentAmount || 0))}
+                {shortDate(bill.dueDate)} 결제 {money(-(bill.dueAmount + bill.overdueAmount))}
               </div>
+              {bill.overdueAmount > 0 && (
+                <div style={{ color: "#E11D48" }}>미납 {money(-bill.overdueAmount)} 포함</div>
+              )}
               <div>
-                {getCardPaymentLabel(1, account.cardPaymentDay)} 예상납부{" "}
-                {money(-(account.nextMonthAmount || 0))}
+                {shortDate(bill.nextDueDate)} 예정 {money(-bill.nextAmount)}
               </div>
+              {bill.credit > 0 && (
+                <div style={{ color: "#059669" }}>선결제 잔액 {money(bill.credit)}</div>
+              )}
             </>
           );
         })()}

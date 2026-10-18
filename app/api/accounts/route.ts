@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/components/lib/prisma";
+import { getCardBills } from "@/components/lib/cardBilling";
 
 export const dynamic = "force-dynamic";
 
@@ -13,88 +14,22 @@ export async function GET(req: NextRequest) {
       orderBy: { displayOrder: "asc" },
     });
 
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
+    // 카드 결제 예정액: 결산일 회차별 사용액에서 카드로 들어온 이체를 오래된 회차부터 차감
+    const cards = accounts.filter((a: any) => a.type === "CARD");
+    const bills = await getCardBills(familyId, cards);
 
-    const withCardAmounts = await Promise.all(
-      accounts.map(async (account: any) => {
-        if (account.type !== "CARD") {
-          return account;
-        }
-
-        const endDay = account.cardCycleEndDay as number | null;
-
-        // cardCycleEndDay 미설정 시 당월 1일~말일을 기본 사이클로 사용
-        let thisStart: Date, thisEnd: Date, nextStart: Date, nextEnd: Date;
-        if (endDay) {
-          thisStart = new Date(year, month - 1, endDay + 1);
-          thisEnd = new Date(year, month, endDay, 23, 59, 59);
-          nextStart = new Date(year, month, endDay + 1);
-          nextEnd = new Date(year, month + 1, endDay, 23, 59, 59);
-        } else {
-          // 사이클 미설정: 당월 1일 ~ 말일
-          thisStart = new Date(year, month, 1);
-          thisEnd = new Date(year, month + 1, 0, 23, 59, 59);
-          nextStart = new Date(year, month + 1, 1);
-          nextEnd = new Date(year, month + 2, 0, 23, 59, 59);
-        }
-
-        const now = new Date();
-
-        // 사이클 마감 직후 시점 (사이클 기간 내 이전 데이터와 겹치지 않도록)
-        const afterCycleEnd = new Date(thisEnd.getTime() + 1000);
-
-        const [thisTxs, nextTxs, thisPaidTxs, nextPaidTxs] = await Promise.all([
-          // 지난 사이클 사용액
-          prisma.transaction.findMany({
-            where: { familyId, type: "EXPENSE", fromAccountId: account.id, transactionAt: { gte: thisStart, lte: thisEnd } },
-          }),
-          // 이번 사이클 사용액
-          prisma.transaction.findMany({
-            where: { familyId, type: "EXPENSE", fromAccountId: account.id, transactionAt: { gte: nextStart, lte: nextEnd } },
-          }),
-          // 이번달 결제 예정액 차감 (2가지 케이스)
-          // ① 사이클 기간 내: "이체" 카테고리만 (선결제 카테고리는 다른 사이클 데이터일 수 있으므로 제외)
-          // ② 사이클 마감 후 오늘까지: "카드 이번달 선결제" 제외 모두 인정 (카드 전월 선결제, 이체 등)
-          prisma.transaction.findMany({
-            where: {
-              familyId, type: "TRANSFER", toAccountId: account.id,
-              OR: [
-                {
-                  transactionAt: { gte: thisStart, lte: thisEnd },
-                  NOT: { category: { in: ["카드 전월 선결제", "카드 이번달 선결제"] } },
-                },
-                {
-                  transactionAt: { gte: afterCycleEnd, lte: now },
-                  NOT: { category: "카드 이번달 선결제" },
-                },
-              ],
-            },
-          }),
-          // 다음달 결제 예정액 차감:
-          // "카드 이번달 선결제" 카테고리로 명시한 것만 (이번 사이클 시작 이후)
-          prisma.transaction.findMany({
-            where: {
-              familyId, type: "TRANSFER", toAccountId: account.id,
-              category: "카드 이번달 선결제",
-              transactionAt: { gte: nextStart },
-            },
-          }),
-        ]);
-
-        const thisExpense = thisTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
-        const nextExpense = nextTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
-        const thisPaid = thisPaidTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
-        const nextPaid = nextPaidTxs.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
-
-        return {
-          ...account,
-          nextPaymentAmount: Math.max(thisExpense - thisPaid, 0),
-          nextMonthAmount: Math.max(nextExpense - nextPaid, 0),
-        };
-      })
-    );
+    const withCardAmounts = accounts.map((account: any) => {
+      const bill = bills.get(account.id);
+      if (!bill) return account;
+      return {
+        ...account,
+        cardBill: bill,
+        cardOutstanding: bill.outstanding,
+        // 기존 화면 호환용: 다음 결제(미납 포함) / 다다음 결제
+        nextPaymentAmount: bill.dueAmount + bill.overdueAmount,
+        nextMonthAmount: bill.nextAmount,
+      };
+    });
 
     return NextResponse.json(withCardAmounts);
   } catch (error) {

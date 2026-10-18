@@ -186,6 +186,7 @@ type Account = {
   nextPaymentDate?: string | null;
   nextPaymentAmount?: number | null;
   nextMonthAmount?: number | null;
+  cardOutstanding?: number;
   maturityDate?: string | null;
   monthlyPayment?: number | null;
   sourceKey?: string | null;
@@ -1227,6 +1228,8 @@ const getPercent = (owner: string) => {
     if (account.type === "LOAN" || account.type === "CARD") {
       // 빚 제외 모드면 부채 계좌 스킵
       if (!includeDebt) return sum;
+      // 카드는 거래내역 기준 미결제 총액 사용 (저장된 balance는 카드에 쓰지 않음)
+      if (account.type === "CARD") return sum - Number(account.cardOutstanding || 0);
       return sum - Math.abs(Number(account.balance || 0));
     }
     if (account.type === "STOCK") {
@@ -1654,6 +1657,8 @@ const lastMonthExpenses = expenses.filter((tx) =>
     );
   })}
 </div>
+      {/* 카드는 결제 예정액을 거래내역으로 자동 계산하므로 금액 입력 숨김 */}
+      {accountType !== "CARD" && (
       <input
         value={accountBalance}
         onChange={(e) => setAccountBalance(e.target.value)}
@@ -1662,6 +1667,7 @@ const lastMonthExpenses = expenses.filter((tx) =>
         type="number"
         style={inputStyle}
       />
+      )}
 
 {accountType === "STOCK" && (
   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -1719,7 +1725,7 @@ const lastMonthExpenses = expenses.filter((tx) =>
     </div>
 
     <div style={cardHintStyle}>
-      결산일 기준으로 카드 이용금액을 자동 계산합니다.
+      결산일 기준으로 카드 이용금액을 자동 계산합니다. 카드로 보낸 「이체」는 오래된 청구부터 갚은 것으로 처리돼요.
     </div>
   </div>
 )}
