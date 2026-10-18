@@ -201,10 +201,34 @@ type Account = {
   } | null;
 };
 
+/**
+ * 분석 화면 데이터 캐시
+ * - 앱을 끄기 전까지 마지막으로 받은 데이터를 기억해 둠
+ * - 다른 탭에 갔다 와도 이 값으로 바로 그려서, 외계인이 LV.1로 줄었다가 다시 크는 현상을 막음
+ * - 화면에 들어올 때마다 뒤에서 조용히 최신 데이터를 다시 받아와 바뀐 부분만 갱신함
+ *   (새 거래를 입력하고 돌아와도 반영되도록)
+ */
+type AnalysisCache = {
+  familyId: number;
+  transactions: Transaction[];
+  users: { id: number; name: string; role?: string }[];
+  accounts: Account[];
+  stockMarketValues: Record<number, number>;
+  dbCategoryIconMap: Record<string, string>;
+  budgets: Record<string, number>;
+};
+let analysisCache: AnalysisCache | null = null;
+const getAnalysisCache = () =>
+  typeof window !== "undefined" && analysisCache && analysisCache.familyId === Number(getCurrentFamilyId())
+    ? analysisCache
+    : null;
+
 function AnalysisPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>(() => getAnalysisCache()?.transactions ?? []);
+  // 데이터가 한 번이라도 준비됐는지 (캐시 또는 서버 응답)
+  const [dataReady, setDataReady] = useState(() => !!getAnalysisCache());
   const [tab, setTab] = useState<"ASSET" | "SPENDING" | "TREND">(
     (searchParams.get("tab") as "ASSET" | "SPENDING" | "TREND") || "SPENDING"
   );
@@ -223,11 +247,11 @@ function AnalysisPageContent() {
     },
   });
 
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [stockMarketValues, setStockMarketValues] = useState<Record<number, number>>({});
+  const [accounts, setAccounts] = useState<Account[]>(() => getAnalysisCache()?.accounts ?? []);
+  const [stockMarketValues, setStockMarketValues] = useState<Record<number, number>>(() => getAnalysisCache()?.stockMarketValues ?? {});
   const [selectedPaletteAccount, setSelectedPaletteAccount] = useState<number | null>(null);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
-  const [users, setUsers] = useState<{ id: number; name: string; role?: string }[]>([]);
+  const [users, setUsers] = useState<{ id: number; name: string; role?: string }[]>(() => getAnalysisCache()?.users ?? []);
   const [accountOwnerId, setAccountOwnerId] = useState("");
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [accountName, setAccountName] = useState("");
@@ -258,9 +282,9 @@ function AnalysisPageContent() {
   const [monthlyChartSelectedCats, setMonthlyChartSelectedCats] = useState<string[]>([]);
   const [monthlyChartMode, setMonthlyChartMode] = useState<"all" | "category">("all");
   const [spendingMonth, setSpendingMonth] = useState<Date | null>(null); // null = 현재 월
-  const [budgets, setBudgets] = useState<Record<string, number>>({});
+  const [budgets, setBudgets] = useState<Record<string, number>>(() => getAnalysisCache()?.budgets ?? {});
     
-  const [monthStartDay, setMonthStartDay] = useState(1);
+  const [monthStartDay, setMonthStartDay] = useState(() => (getAnalysisCache() ? getSavedMonthStartDay() : 1));
   const [trendMonth, setTrendMonth] = useState(() => {
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), 1);
@@ -278,7 +302,7 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
   const [assetOwnerFilter, setAssetOwnerFilter] = useState("전체");
   const keyboardHeight = useKeyboardOffset();
   // DB categories: name -> English icon key (from profile page)
-  const [dbCategoryIconMap, setDbCategoryIconMap] = useState<Record<string, string>>({});
+  const [dbCategoryIconMap, setDbCategoryIconMap] = useState<Record<string, string>>(() => getAnalysisCache()?.dbCategoryIconMap ?? {});
   const fetchAccounts = async () => {
     try {
       const res = await fetch(`/api/accounts?familyId=${getCurrentFamilyId()}`);
@@ -300,6 +324,7 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
   
   // Hydration safe: localStorage 이름을 클라이언트 마운트 후 즉시 적용
   useEffect(() => {
+    if (getAnalysisCache()) return; // 캐시된 실제 이름이 이미 있음
     const myId = getCurrentUserId();
     const myName = localStorage.getItem("alien_my_name") || "나";
     const partnerName = localStorage.getItem("alien_partner_name") || "파트너";
@@ -388,6 +413,17 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
       setStockMarketValues(stockMap);
       setDbCategoryIconMap(iconMap);
       setBudgets(budgetMap);
+      setDataReady(true);
+
+      analysisCache = {
+        familyId: Number(familyId),
+        transactions: txData || [],
+        users: [...mappedUsers, { id: 0, name: "공동" }],
+        accounts: sorted,
+        stockMarketValues: stockMap,
+        dbCategoryIconMap: iconMap,
+        budgets: budgetMap,
+      };
     }).catch(console.error);
   }, []);
 
@@ -797,17 +833,24 @@ const getPercent = (owner: string) => {
           <strong style={{ fontSize: 14 }}>우리의 외계인 👽</strong>
           <span style={smallSubTextStyle}>영웅 5명 · 50레벨</span>
         </div>
-        <AssetChick
-          totalAssets={accounts.reduce((sum, account) => {
-            // 총 자산 (부채 제외) — 기존 커플 로켓과 같은 기준
-            if (account.type === "LOAN" || account.type === "CARD") return sum;
-            if (account.type === "STOCK") return sum + Number(stockMarketValues[account.id] || account.stockCash || 0);
-            return sum + Number(account.balance || 0);
-          }, 0)}
-          transactions={transactions}
-          budgets={budgets}
-          monthStartDay={monthStartDay}
-        />
+        {dataReady ? (
+          <AssetChick
+            totalAssets={accounts.reduce((sum, account) => {
+              // 총 자산 (부채 제외) — 기존 커플 로켓과 같은 기준
+              if (account.type === "LOAN" || account.type === "CARD") return sum;
+              if (account.type === "STOCK") return sum + Number(stockMarketValues[account.id] || account.stockCash || 0);
+              return sum + Number(account.balance || 0);
+            }, 0)}
+            transactions={transactions}
+            budgets={budgets}
+            monthStartDay={monthStartDay}
+          />
+        ) : (
+          // 첫 로딩 중엔 LV.1 외계인 대신 자리만 잡아둠 (아기→성장 깜빡임 방지)
+          <div style={{ marginTop: 12, height: 220, borderRadius: 20, background: "#F5FDEB", display: "grid", placeItems: "center", color: "#9BB67A", fontSize: 13, fontWeight: 700 }}>
+            📡 외계인과 교신 중…
+          </div>
+        )}
       </section>
     </>
   );

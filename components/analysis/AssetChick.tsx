@@ -62,7 +62,7 @@ type Hero = {
   cls: string; // 계열 이름 (미정이면 "???")
   tint: string; // 배경 위에 살짝 얹는 색
   glow: string; // 캐릭터 뒤 오라 색
-  accent: string; // 링·파동·빛 입자 색
+  accent: string; // 빛 입자·텔레포트 빔 색
   particles: [string, string]; // [초반, 후반(6레벨차~)] 이모지 또는 "dot"
 };
 
@@ -158,9 +158,6 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
 
   // 연출: 영웅 안에서 단계가 오를수록 화려해짐
   const fx = {
-    floorRings: step >= 7 ? 3 : step >= 5 ? 2 : step >= 3 ? 1 : 0,
-    pulse: step >= 5,
-    ring: step >= 8,
     beams: step >= 10,
     particle: step >= 6 ? hero.particles[1] : hero.particles[0],
   };
@@ -214,10 +211,7 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
       <style>{`
         @keyframes alienBob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
         @keyframes alienGlow { 0%,100% { opacity: .65; transform: translate(-50%,-50%) scale(.92) } 50% { opacity: 1; transform: translate(-50%,-50%) scale(1.06) } }
-        @keyframes alienRing { from { transform: translate(-50%,-50%) rotate(0deg) } to { transform: translate(-50%,-50%) rotate(360deg) } }
         @keyframes alienFloat { 0% { transform: translateY(0) scale(.7); opacity: 0 } 15% { opacity: 1 } 100% { transform: translateY(-120px) scale(1.05); opacity: 0 } }
-        @keyframes alienPulse { 0% { transform: translate(-50%,-50%) scale(.5); opacity: .9 } 100% { transform: translate(-50%,-50%) scale(1.35); opacity: 0 } }
-        @keyframes alienFloor { 0%,100% { opacity: .55 } 50% { opacity: 1 } }
         @keyframes alienBeam { 0%,100% { opacity: .35; transform: scaleY(.9) } 50% { opacity: .85; transform: scaleY(1.05) } }
         @keyframes bubbleIn { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: translateY(0) } }
       `}</style>
@@ -270,61 +264,6 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
             animation: "alienGlow 2.6s ease-in-out infinite",
           }}
         />
-
-        {/* 퍼지는 신호 파동 */}
-        {fx.pulse &&
-          [0, 1].map((i) => (
-            <div
-              key={`w${i}`}
-              style={{
-                position: "absolute",
-                left: "50%",
-                top: "52%",
-                width: 170,
-                height: 170,
-                borderRadius: "50%",
-                border: `2px solid ${hero.accent}`,
-                animation: `alienPulse 2.8s ease-out ${i * 1.4}s infinite`,
-              }}
-            />
-          ))}
-
-        {/* 회전 광륜 */}
-        {fx.ring && (
-          <div
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: "52%",
-              width: 178,
-              height: 178,
-              borderRadius: "50%",
-              background: `conic-gradient(from 0deg, transparent 0 58%, ${hero.accent} 78%, rgba(255,220,120,0.9) 88%, transparent 100%)`,
-              WebkitMask: "radial-gradient(circle, transparent 58%, #000 60%, #000 66%, transparent 68%)",
-              mask: "radial-gradient(circle, transparent 58%, #000 60%, #000 66%, transparent 68%)",
-              animation: `alienRing ${fx.beams ? 8 : 3.2}s linear infinite`,
-            }}
-          />
-        )}
-
-        {/* 발밑 착륙 링 */}
-        {Array.from({ length: fx.floorRings }, (_, i) => (
-          <div
-            key={`f${i}`}
-            style={{
-              position: "absolute",
-              left: "50%",
-              bottom: 22 - i * 3,
-              width: 96 + i * 26,
-              height: 18 + i * 5,
-              marginLeft: -(48 + i * 13),
-              borderRadius: "50%",
-              border: `2px solid ${hero.accent}`,
-              boxShadow: `0 0 10px ${hero.accent}`,
-              animation: `alienFloor ${2 + i * 0.4}s ease-in-out ${i * 0.3}s infinite`,
-            }}
-          />
-        ))}
 
         {/* 떠오르는 파티클 */}
         {particles.map((i) => (
