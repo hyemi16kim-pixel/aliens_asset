@@ -247,7 +247,8 @@ function AnalysisPageContent() {
   useModalBack(showAccountModal, () => { setShowAccountModal(false); });
   useModalBack(!!selectedStockAccount, () => setSelectedStockAccount(null));
   const [trendMoneyType, setTrendMoneyType] = useState<"EXPENSE" | "INCOME">("EXPENSE");
-  const [selectedTrendCategory, setSelectedTrendCategory] = useState<string | null>(null);
+  // 거래 수정 화면에서 돌아왔을 때 보던 카테고리를 다시 펼치기 위해 URL(cat)에서 복원
+  const [selectedTrendCategory, setSelectedTrendCategory] = useState<string | null>(searchParams.get("cat"));
   const [includeDebt, setIncludeDebt] = useState(true);
   const [showBudgetInTrend, setShowBudgetInTrend] = useState(false);
   const [budgetCatsOnlyInTrend, setBudgetCatsOnlyInTrend] = useState(false);
@@ -311,7 +312,10 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
   useEffect(() => {
     const savedStartDay = getSavedMonthStartDay();
     setMonthStartDay(savedStartDay);
-    setTrendMonth(getBaseMonthByStartDay(new Date(), savedStartDay));
+    // URL에 trendMonth(YYYY-MM)가 있으면 그 달로 복원 (거래 수정 후 돌아왔을 때)
+    const savedTrendMonth = searchParams.get("trendMonth");
+    const m = savedTrendMonth?.match(/^(\d{4})-(\d{1,2})$/);
+    setTrendMonth(m ? new Date(Number(m[1]), Number(m[2]) - 1, 1) : getBaseMonthByStartDay(new Date(), savedStartDay));
 
     const familyId = getCurrentFamilyId();
     const familyCode = getCurrentFamilyCode();
@@ -1518,7 +1522,21 @@ const lastMonthExpenses = expenses.filter((tx) =>
               {selectedCategoryTransactions
                 .sort((a: any, b: any) => new Date(b.transactionAt).getTime() - new Date(a.transactionAt).getTime())
                 .map((tx: any) => (
-                <div key={tx.id} style={drilldownTxRowStyle}>
+                <div
+                  key={tx.id}
+                  role="button"
+                  onClick={() => {
+                    // 돌아왔을 때 같은 화면(추세 탭·같은 달·같은 카테고리)이 보이도록 현재 주소에 상태 저장
+                    const q = new URLSearchParams({
+                      tab: "TREND",
+                      trendMonth: `${trendYear}-${trendMonthIndex + 1}`,
+                      cat: selectedTrendCategory,
+                    });
+                    window.history.replaceState(null, "", `/analysis?${q.toString()}`);
+                    router.push(`/transactions?edit=${tx.id}`);
+                  }}
+                  style={{ ...drilldownTxRowStyle, cursor: "pointer" }}
+                >
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 12, fontWeight: 800, color: "#2d2545" }}>
                       {tx.memo || tx.category || "기타"}
