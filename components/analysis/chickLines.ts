@@ -31,7 +31,7 @@ const ADJUST_CATEGORIES = ["자산수정", "자산 수정"]; // 잔고 맞춤 �
 
 const won = (v: number) => {
   const n = Math.round(Math.abs(v));
-  if (n >= 100_000_000) return `${(n / 100_000_000).toFixed(1)}억`;
+  if (n >= 100_000_000) return `${(n / 100_000_000).toFixed(1).replace(/\.0$/, "")}억`;
   if (n >= 10_000) return `${Math.round(n / 10_000).toLocaleString()}만`;
   return n.toLocaleString();
 };
@@ -48,9 +48,19 @@ const hasBatchim = (word: string) => {
 const josa = (word: string, withBatchim: string, without: string) => `${word}${hasBatchim(word) ? withBatchim : without}`;
 
 // 메모로 알아보는 소비 패턴
-const DELIVERY = /쿠팡이츠|배달의민족|배민|우아한형제들|요기요|땡겨요/;
+// 배달: 카테고리 '식비' 중 메모에 (주)우아한형제들(배민) 또는 쿠팡이츠가 들어간 거래만
+const DELIVERY_CATEGORY = "식비";
+const DELIVERY_MEMO = /우아한형제들|쿠팡이츠/;
 const CONVENIENCE = /GS25|지에스25|지에스 |씨유|(^|[^A-Za-z])CU([^A-Za-z]|$)|세븐일레븐|이마트24|미니스톱/;
-const CAFE = /커피|카페|스타벅스|메가엠지씨|메가커피|컴포즈|빽다방|이디야|투썸|폴바셋|할리스|바나프레소/;
+// 커피: 카테고리 '식비' 중 메모에 프랜차이즈 커피 이름이 들어간 거래만
+const CAFE_CATEGORY = "식비";
+const CAFE_MEMO = new RegExp(
+  [
+    "스타벅스", "메가엠지씨", "메가커피", "컴포즈", "빽다방", "이디야", "투썸", "폴바셋", "할리스",
+    "바나프레소", "커피빈", "파스쿠찌", "엔제리너스", "탐앤탐스", "더벤티", "매머드", "커피베이",
+    "블루보틀", "텐퍼센트", "하삼동", "셀렉토", "커피에반하다", "드롭탑", "카페베네", "달콤커피", "감성커피",
+  ].join("|")
+);
 const TAXI = /택시|카카오T|카카오모빌리티|우티|UT /;
 const SALARY = /월급|급여|salary/i;
 
@@ -62,8 +72,9 @@ export function buildChickLines(params: {
   maxLevel: number;
   levelProgress: number;
   toNextLevel: number; // 다음 레벨까지 남은 금액
+  goal: number; // 사용자가 정한 자산 목표 금액
 }): ChickLine[] {
-  const { transactions, budgets, monthStartDay, level, maxLevel, levelProgress, toNextLevel } = params;
+  const { transactions, budgets, monthStartDay, level, maxLevel, levelProgress, toNextLevel, goal } = params;
   const now = new Date();
   const cur = getCustomMonthRange(getBaseMonthByStartDay(now, monthStartDay), monthStartDay);
   const prev = getCustomMonthRange(getBaseMonthByStartDay(new Date(cur.start.getTime() - 1), monthStartDay), monthStartDay);
@@ -90,6 +101,26 @@ export function buildChickLines(params: {
   const cat = (name: string) => (t: ChickTx) => isExpense(t) && (t.category || "") === name;
   const memoHas = (re: RegExp) => (t: ChickTx) => isExpense(t) && re.test(`${t.memo || ""} ${t.category || ""}`);
 
+  /* ───── 이 가족의 평소 수준 (금액 기준을 고정값 대신 사용자 데이터로) ───── */
+  // 최근 두 달(꽉 찬 달) 평균. 기록이 없는 달은 빼고 계산
+  const avgOf = (vals: number[]) => {
+    const v = vals.filter((x) => x > 0);
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
+  };
+  const isExtraIncome = (t: ChickTx) => isIncome(t) && !SALARY.test(`${t.category || ""} ${t.memo || ""}`);
+  const avgMonthExp = avgOf([sum(prev.start, prev.end, isExpense), sum(prev2.start, prev2.end, isExpense)]);
+  const avgMonthIncome = avgOf([sum(prev.start, prev.end, isIncome), sum(prev2.start, prev2.end, isIncome)]);
+  const periodDays = Math.max(Math.round(totalMs / dayMs), 1);
+  const expSoFar = sum(cur.start, now, isExpense);
+  // 지난 기록이 없으면 이번 달 지금까지의 하루 평균으로 대신 (3일 이상 쌓였을 때)
+  const avgDailyExp = avgMonthExp > 0 ? avgMonthExp / periodDays : dayOfPeriod >= 3 ? expSoFar / dayOfPeriod : 0;
+  // 횟수: 지난달 같은 시점보다 늘었는지
+  const countNow = (re: RegExp) => pick(cur.start, now, memoHas(re));
+  const countPrev = (re: RegExp) => pick(prev.start, prevSamePoint, memoHas(re)).length;
+  const isCafe = (t: ChickTx) => isExpense(t) && (t.category || "") === CAFE_CATEGORY && CAFE_MEMO.test(t.memo || "");
+  const isDelivery = (t: ChickTx) => isExpense(t) && (t.category || "") === DELIVERY_CATEGORY && DELIVERY_MEMO.test(t.memo || "");
+  const moreThanUsual = (cnt: number, prevCnt: number, ratio: number) => cnt >= 3 && cnt >= Math.max(prevCnt * ratio, prevCnt + 1);
+
   const lines: ChickLine[] = [];
   const say = (kind: LineKind, mood: Mood, texts: string[]) => lines.push({ kind, mood, texts });
 
@@ -114,7 +145,8 @@ export function buildChickLines(params: {
       "무지출 성공 직전이야. 야식만 참으면 돼!",
     ]);
   }
-  if (todayExp >= 100_000) {
+  // 평소 하루 지출의 2.5배 이상
+  if (avgDailyExp > 0 && todayExp >= avgDailyExp * 2.5) {
     say("status", "sad", [
       `오늘 벌써 ${won(todayExp)}원… 더듬이가 축 처졌어.`,
       `오늘 지출 ${won(todayExp)}원! 내일은 쉬어가자.`,
@@ -122,6 +154,7 @@ export function buildChickLines(params: {
     ]);
     say("status", "surprised", [
       `삐빅! 오늘 벌써 ${won(todayExp)}원이야?!`,
+      `오늘 지출이 평소의 ${(todayExp / avgDailyExp).toFixed(1)}배야! 깜짝!`,
       "경보! 오늘 지출이 왜 이렇게 커?!",
     ]);
   }
@@ -213,7 +246,8 @@ export function buildChickLines(params: {
         `남은 ${daysLeft}일, 하루 ${won(perDay)}원씩 쓰면 딱 맞아!`,
         `예산 ${won(remaining)}원 남았어. 하루 ${won(perDay)}원 안에서!`,
       ]);
-      if (perDay < 10_000) {
+      // 남은 하루 예산이 원래 하루 예산 페이스의 40% 미만
+      if (perDay < (totalBudget / periodDays) * 0.4) {
         say("advice", "sad", [
           `남은 예산이 하루 ${won(perDay)}원뿐이야… ㅠㅠ`,
           `${daysLeft}일 동안 ${won(remaining)}원으로 버텨야 해…`,
@@ -278,8 +312,10 @@ export function buildChickLines(params: {
   }
 
   /* ───── 소비 패턴 (메모 기준) ───── */
-  const delivery = pick(cur.start, now, memoHas(DELIVERY));
-  if (delivery.length >= 5) {
+  // 횟수 기준도 고정값 대신 '지난달 같은 시점보다 늘었는지'로 판단
+  const delivery = pick(cur.start, now, isDelivery);
+  const deliveryPrev = pick(prev.start, prevSamePoint, isDelivery).length;
+  if (moreThanUsual(delivery.length, deliveryPrev, 1.2)) {
     const avg = total(delivery) / delivery.length;
     say("advice", "neutral", [
       `배달 ${delivery.length}번! 한 번만 집밥 해도 ${won(avg)}원 아껴.`,
@@ -287,28 +323,28 @@ export function buildChickLines(params: {
       `배달 앱에 ${won(total(delivery))}원 썼어. 지구 오토바이 무서워.`,
     ]);
   }
-  if (delivery.length >= 8) {
+  if (moreThanUsual(delivery.length, deliveryPrev, 1.8)) {
     say("status", "sad", [
       `배달을 ${delivery.length}번이나… 알림만 봐도 눈물 나.`,
       "배달비가 쌓여서 내 연료가 줄었어 ㅠㅠ",
     ]);
   }
-  const conv = pick(cur.start, now, memoHas(CONVENIENCE));
-  if (conv.length >= 8) {
+  const conv = countNow(CONVENIENCE);
+  if (moreThanUsual(conv.length, countPrev(CONVENIENCE), 1.3)) {
     say("advice", "neutral", [
       `편의점 ${conv.length}번에 ${won(total(conv))}원 나갔어!`,
       "편의점은 티끌 모아 태산! 장 볼 때 미리 사자.",
     ]);
   }
-  const cafe = pick(cur.start, now, memoHas(CAFE));
-  if (cafe.length >= 6) {
+  const cafe = pick(cur.start, now, isCafe);
+  if (moreThanUsual(cafe.length, pick(prev.start, prevSamePoint, isCafe).length, 1.3)) {
     say("advice", "neutral", [
       `카페에 ${won(total(cafe))}원 썼어. 텀블러 할인도 있어!`,
       `카페 ${cafe.length}번 갔어. 주 1회는 홈카페 어때?`,
     ]);
   }
-  const taxi = pick(cur.start, now, memoHas(TAXI));
-  if (taxi.length >= 3) {
+  const taxi = countNow(TAXI);
+  if (moreThanUsual(taxi.length, countPrev(TAXI), 1.3)) {
     say("advice", "neutral", [
       `택시 ${taxi.length}번 탔어. 텔레포트는 아직 안 돼!`,
       `택시 ${taxi.length}번 탔어. 조금 일찍 나서면 아껴!`,
@@ -328,7 +364,9 @@ export function buildChickLines(params: {
   /* ───── 이번주 큰 지출 ───── */
   const weekAgo = new Date(now.getTime() - 7 * dayMs);
   const big = pick(weekAgo, now, isExpense).sort((a, b) => b.amount - a.amount)[0];
-  if (big && big.amount >= 300_000) {
+  // 평소 한 달 지출의 15% 이상인 한 건
+  const bigBase = avgMonthExp || expSoFar;
+  if (big && bigBase > 0 && big.amount >= bigBase * 0.15) {
     const label = (big.memo || big.category || "큰 지출").slice(0, 8);
     say("advice", "neutral", [
       `이번주 '${label}' ${won(big.amount)}원, 다음달 예산에 넣자.`,
@@ -358,7 +396,8 @@ export function buildChickLines(params: {
   if (recentSalary.length > 0) {
     say("status", "surprised", ["삐빅! 월급 신호 수신! 깜짝이야!", "어? 통장이 갑자기 두둑해졌어!"]);
   }
-  const bigIncome = pick(new Date(now.getTime() - 3 * dayMs), now, (t) => isIncome(t) && !SALARY.test(`${t.category || ""} ${t.memo || ""}`) && t.amount >= 1_000_000)[0];
+  // 월급 외 수입 중 평소 한 달 수입의 30% 이상
+  const bigIncome = avgMonthIncome > 0 ? pick(new Date(now.getTime() - 3 * dayMs), now, (t) => isExtraIncome(t) && t.amount >= avgMonthIncome * 0.3)[0] : undefined;
   if (bigIncome) {
     say("status", "surprised", [
       `${won(bigIncome.amount)}원이 들어왔어! 눈이 번쩍!`,
@@ -388,7 +427,7 @@ export function buildChickLines(params: {
     say("status", "happy", ["이번 영웅 수련이 거의 끝났어! 마무리하자.", "곧 다음 영웅이 착륙할 거야. 두근두근!"]);
   }
   if (level >= maxLevel) {
-    say("status", "happy", ["목표 달성! 영웅 여섯 모두 완성이야!", "5억 달성! 지구인 둘 덕분이야. 고마워!"]);
+    say("status", "happy", ["목표 달성! 영웅 여섯 모두 완성이야!", `${won(goal)} 달성! 지구인 둘 덕분이야. 고마워!`]);
   }
   // 영웅 직업별 잡담 (기사 → 팔라딘 → 검사 → 법사 → 궁수 → 힐러)
   const classLines: Record<number, string[]> = {

@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
       familyName: family.name,
       monthStartDay: family.monthStartDay,
       budgets: family.budgets,
+      assetGoal: family.assetGoal ?? null,
       owner: owner ? { id: owner.id, name: owner.name, color: owner.color } : null,
       partner: partner ? { id: partner.id, name: partner.name, color: partner.color } : null,
     });
@@ -55,6 +56,17 @@ export async function PATCH(req: NextRequest) {
     }
     if (body.monthStartDay !== undefined) updateData.monthStartDay = Number(body.monthStartDay);
     if (body.budgets !== undefined) updateData.budgets = body.budgets;
+    if (body.assetGoal !== undefined) {
+      // 자산 목표 금액: null이면 해제, 숫자면 1원 이상만 허용
+      if (body.assetGoal === null) updateData.assetGoal = null;
+      else {
+        const goal = Math.round(Number(body.assetGoal));
+        if (!Number.isFinite(goal) || goal <= 0) {
+          return NextResponse.json({ error: "목표 금액이 올바르지 않습니다." }, { status: 400 });
+        }
+        updateData.assetGoal = goal;
+      }
+    }
 
     if (Object.keys(updateData).length > 0) {
       await prisma.family.update({ where: { id: familyId }, data: updateData });

@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { buildChickLines, type ChickLine, type ChickTx, type Mood } from "@/components/analysis/chickLines";
+import AlienGoalSheet from "@/components/analysis/AlienGoalSheet";
 
 /**
  * 우리의 외계인 👽 — 영웅 6명 키우기
  *
- * - 목표 자산(5억)을 60단계로 나눠 레벨 1~60 (1레벨 ≈ 833만원)
+ * - 사용자가 정한 자산 목표 금액을 60단계로 나눠 레벨 1~60
+ *   (목표 금액은 외계인 카드를 꾹 눌러 입력 → 가족 설정 DB에 저장)
  * - 10레벨마다 새 영웅이 착륙: 기사 → 팔라딘 → 검사 → 법사 → 궁수 → 힐러
  * - 각 영웅의 1~2단계는 공통 모습(아기 외계인), 3~10단계는 직업별 모습
  * - 이미지: public/aliens/
@@ -17,15 +19,16 @@ import { buildChickLines, type ChickLine, type ChickTx, type Mood } from "@/comp
  * - 배경: public/aliens/bg_village.jpg (외계인 마을)
  */
 
-const GOAL = 500_000_000; // 목표 5억
 const MAX_LEVEL = 60;
-const STEP = GOAL / MAX_LEVEL; // 레벨당 약 833만원
+const LONG_PRESS_MS = 550; // 꾹 누르기 인식 시간
 
 type Props = {
   totalAssets: number;
   transactions: ChickTx[];
   budgets: Record<string, number>;
   monthStartDay: number;
+  goal: number | null; // 자산 목표 금액 (미설정이면 null)
+  onSaveGoal: (goal: number) => Promise<void>;
 };
 
 /* ───────── 영웅 6명 ───────── */
@@ -73,15 +76,15 @@ const HEROES: Hero[] = [
   },
   {
     no: 6, from: 51, to: 60, key: "healer", cls: "힐러",
-    names: [], // 이미지 다시 작업 중 → 들어오면 3~10단계 이름 채우기
+    names: ["견습 사제", "성서 사제", "푸른구슬 사제", "빛의 사제", "깃발 사제", "후광 사제", "보주 대사제", "은하 대성자"],
     tint: "linear-gradient(180deg,#FFFCEF 0%,#EEF2FF 100%)", glow: "rgba(255,230,150,0.7)", accent: "rgba(255,215,120,0.85)", particles: ["✨", "💖"],
   },
 ];
 
 // 아직 이미지가 없는 단계 → 바로 아래 단계 이미지로 대신 표시
 const MISSING: Record<string, number[]> = { sword: [8] };
-// 3~10단계 이미지가 아직 없는 영웅 → 🛸 + "???"로 표시
-const NOT_READY = ["healer"];
+// 3~10단계 이미지가 아직 없는 영웅 → 🛸 + "???"로 표시 (예: ["healer"])
+const NOT_READY: string[] = [];
 
 const heroOf = (level: number) => HEROES.find((h) => level >= h.from && level <= h.to) || HEROES[0];
 const stepOf = (level: number) => level - heroOf(level).from + 1; // 영웅 안에서 1~10단계
@@ -107,7 +110,7 @@ const withRo = (word: string) => {
 };
 
 const won = (v: number) =>
-  v >= 100_000_000 ? `${(v / 100_000_000).toFixed(1)}억` : `${Math.round(v / 10_000).toLocaleString()}만`;
+  v >= 100_000_000 ? `${(v / 100_000_000).toFixed(1).replace(/\.0$/, "")}억` : `${Math.round(v / 10_000).toLocaleString()}만`;
 
 // 상태 리액션·조언을 인사/잡담보다 3배 자주 고름 (직전과 같은 상황은 피함)
 function pickLine(lines: ChickLine[], exclude: number | null) {
@@ -165,11 +168,13 @@ function HeroSlot({ hero, level }: { hero: Hero; level: number }) {
 }
 
 /* ───────── 컴포넌트 ───────── */
-export default function AssetChick({ totalAssets, transactions, budgets, monthStartDay }: Props) {
+export default function AssetChick({ totalAssets, transactions, budgets, monthStartDay, goal, onSaveGoal }: Props) {
   const safeAssets = Math.max(totalAssets, 0);
-  const level = Math.min(MAX_LEVEL, Math.floor(safeAssets / STEP) + 1);
+  const hasGoal = !!goal && goal >= MAX_LEVEL;
+  const STEP = hasGoal ? goal / MAX_LEVEL : 1; // 레벨당 금액 = 목표 ÷ 60
+  const level = hasGoal ? Math.min(MAX_LEVEL, Math.floor(safeAssets / STEP) + 1) : 1;
   const levelBase = (level - 1) * STEP;
-  const levelProgress = level >= MAX_LEVEL ? 1 : (safeAssets - levelBase) / STEP;
+  const levelProgress = !hasGoal ? 0 : level >= MAX_LEVEL ? 1 : (safeAssets - levelBase) / STEP;
   const nextAmount = level * STEP;
   const hero = heroOf(level);
   const step = stepOf(level); // 이 영웅 안에서 몇 번째 단계인지 (1~10)
@@ -181,18 +186,21 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
     particle: step >= 6 ? hero.particles[1] : hero.particles[0],
   };
 
-  const lines = useMemo(
+  const lines = useMemo<ChickLine[]>(
     () =>
-      buildChickLines({
-        transactions,
-        budgets,
-        monthStartDay,
-        level,
-        maxLevel: MAX_LEVEL,
-        levelProgress,
-        toNextLevel: Math.max(nextAmount - safeAssets, 0),
-      }),
-    [transactions, budgets, monthStartDay, level, levelProgress, nextAmount, safeAssets]
+      hasGoal
+        ? buildChickLines({
+            transactions,
+            budgets,
+            monthStartDay,
+            level,
+            maxLevel: MAX_LEVEL,
+            levelProgress,
+            toNextLevel: Math.max(nextAmount - safeAssets, 0),
+            goal: goal as number,
+          })
+        : [{ kind: "status", mood: "surprised", texts: ["우리 목표 금액을 알려줘! 카드를 꾹 눌러봐."] }],
+    [hasGoal, goal, transactions, budgets, monthStartDay, level, levelProgress, nextAmount, safeAssets]
   );
 
   // 무작위 값은 화면이 뜬 뒤에 정해야 서버/클라이언트 불일치가 없음
@@ -207,13 +215,55 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
   const lineText = line && pickState ? line.texts[pickState.textIdx % line.texts.length] : null;
   const src = line ? alienSrc(level, line.mood) : null;
 
+  // 꾹 누르기 → 목표 금액 입력 시트
+  const [goalOpen, setGoalOpen] = useState(false);
+  const [pressing, setPressing] = useState(false);
+  const pressTimer = useRef<number | null>(null);
+  const pressStart = useRef<{ x: number; y: number } | null>(null);
+  const longPressed = useRef(false);
+  const cancelPress = () => {
+    if (pressTimer.current) window.clearTimeout(pressTimer.current);
+    pressTimer.current = null;
+    pressStart.current = null;
+    setPressing(false);
+  };
+  const pressHandlers = {
+    onPointerDown: (e: React.PointerEvent) => {
+      longPressed.current = false;
+      pressStart.current = { x: e.clientX, y: e.clientY };
+      setPressing(true);
+      pressTimer.current = window.setTimeout(() => {
+        longPressed.current = true;
+        setPressing(false);
+        navigator.vibrate?.(20);
+        setGoalOpen(true);
+      }, LONG_PRESS_MS);
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      // 스와이프·스크롤이면 꾹 누르기 취소
+      const s0 = pressStart.current;
+      if (s0 && Math.hypot(e.clientX - s0.x, e.clientY - s0.y) > 10) cancelPress();
+    },
+    onPointerUp: cancelPress,
+    onPointerLeave: cancelPress,
+    onPointerCancel: cancelPress,
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault(), // 길게 눌러도 이미지 저장 메뉴 안 뜨게
+  };
+  useEffect(() => () => cancelPress(), []);
+
   const nextLine = () => {
+    // 꾹 누르기 직후의 손 떼기는 '대사 넘기기'로 치지 않음
+    if (longPressed.current) {
+      longPressed.current = false;
+      return;
+    }
     setImageFailed(false);
     setPickState((p) => pickLine(lines, p?.idx ?? null));
   };
 
   // 다음 단계 안내
   const nextInfo = (() => {
+    if (!hasGoal) return "목표 금액을 정하면 레벨이 시작돼요";
     if (level >= MAX_LEVEL) return "영웅 6명 수련 완료!";
     const next = level + 1;
     if (next > hero.to) return `LV.${next}에서 ${HEROES[hero.no]?.cls ?? "새 영웅"} 착륙`;
@@ -226,7 +276,17 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
   const particles = Array.from({ length: particleCount }, (_, i) => i);
 
   return (
-    <div>
+    <>
+    <div
+      {...pressHandlers}
+      style={{
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        WebkitTouchCallout: "none",
+        transform: pressing ? "scale(0.985)" : "none",
+        transition: `transform ${pressing ? LONG_PRESS_MS : 150}ms ease`,
+      }}
+    >
       <style>{`
         @keyframes alienBob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
         @keyframes alienGlow { 0%,100% { opacity: .65; transform: translate(-50%,-50%) scale(.92) } 50% { opacity: 1; transform: translate(-50%,-50%) scale(1.06) } }
@@ -354,6 +414,7 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
                 key={src}
                 src={src}
                 alt={`LV.${level} ${levelName}`}
+                draggable={false}
                 onError={() => setImageFailed(true)}
                 style={{ width: "100%", height: "100%", objectFit: "contain", filter: "drop-shadow(0 6px 8px rgba(40,80,20,0.2))" }}
               />
@@ -457,8 +518,8 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
             현재 자산 <strong style={{ color: "#7C5CFF" }}>{won(safeAssets)}원</strong>
           </span>
           <span>
-            {level >= MAX_LEVEL ? (
-              <strong style={{ color: "#FF6B9D" }}>목표 5억 달성 🎉</strong>
+            {!hasGoal ? null : level >= MAX_LEVEL ? (
+              <strong style={{ color: "#FF6B9D" }}>목표 {won(goal as number)} 달성 🎉</strong>
             ) : (
               <>
                 LV.{level + 1}까지 <strong style={{ color: "#FF6B9D" }}>{won(nextAmount - safeAssets)}원</strong>
@@ -479,7 +540,17 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
         </div>
         <div style={{ marginTop: 5, display: "flex", justifyContent: "space-between", fontSize: 10, color: "#B0A8C8" }}>
           <span>{nextInfo}</span>
-          <span>목표 5억 · 1레벨 약 833만원</span>
+          {hasGoal ? (
+            <span>목표 {won(goal as number)} · 꾹 눌러 수정</span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setGoalOpen(true)}
+              style={{ border: "none", background: "#F5FDEB", color: "#4C7A12", fontSize: 10, fontWeight: 900, padding: "3px 9px", borderRadius: 999, cursor: "pointer" }}
+            >
+              목표 정하기
+            </button>
+          )}
         </div>
       </div>
 
@@ -490,5 +561,16 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
         ))}
       </div>
     </div>
+
+    {/* 카드 밖(body)에 띄워야 눌림 효과·꾹 누르기와 겹치지 않음 */}
+    <AlienGoalSheet
+      open={goalOpen}
+      initialGoal={goal}
+      currentAssets={safeAssets}
+      maxLevel={MAX_LEVEL}
+      onClose={() => setGoalOpen(false)}
+      onSave={onSaveGoal}
+    />
+    </>
   );
 }

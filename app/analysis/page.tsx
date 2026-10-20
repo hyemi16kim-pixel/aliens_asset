@@ -216,6 +216,7 @@ type AnalysisCache = {
   stockMarketValues: Record<number, number>;
   dbCategoryIconMap: Record<string, string>;
   budgets: Record<string, number>;
+  assetGoal: number | null;
 };
 let analysisCache: AnalysisCache | null = null;
 const getAnalysisCache = () =>
@@ -283,6 +284,8 @@ function AnalysisPageContent() {
   const [monthlyChartMode, setMonthlyChartMode] = useState<"all" | "category">("all");
   const [spendingMonth, setSpendingMonth] = useState<Date | null>(null); // null = 현재 월
   const [budgets, setBudgets] = useState<Record<string, number>>(() => getAnalysisCache()?.budgets ?? {});
+  // 우리의 외계인 — 자산 목표 금액 (가족 설정에 저장, 미설정이면 null)
+  const [assetGoal, setAssetGoal] = useState<number | null>(() => getAnalysisCache()?.assetGoal ?? null);
     
   const [monthStartDay, setMonthStartDay] = useState(() => (getAnalysisCache() ? getSavedMonthStartDay() : 1));
   const [trendMonth, setTrendMonth] = useState(() => {
@@ -413,6 +416,8 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
       setStockMarketValues(stockMap);
       setDbCategoryIconMap(iconMap);
       setBudgets(budgetMap);
+      const goalValue = Number(settingsData?.assetGoal) > 0 ? Number(settingsData.assetGoal) : null;
+      setAssetGoal(goalValue);
       setDataReady(true);
 
       analysisCache = {
@@ -423,6 +428,7 @@ const [selectedMonthSummary, setSelectedMonthSummary] = useState<{
         stockMarketValues: stockMap,
         dbCategoryIconMap: iconMap,
         budgets: budgetMap,
+        assetGoal: goalValue,
       };
     }).catch(console.error);
   }, []);
@@ -844,6 +850,17 @@ const getPercent = (owner: string) => {
             transactions={transactions}
             budgets={budgets}
             monthStartDay={monthStartDay}
+            goal={assetGoal}
+            onSaveGoal={async (goal) => {
+              const res = await fetch("/api/family-settings", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ familyId: getCurrentFamilyId(), assetGoal: goal }),
+              });
+              if (!res.ok) throw new Error("목표 저장 실패");
+              setAssetGoal(goal);
+              if (analysisCache) analysisCache = { ...analysisCache, assetGoal: goal };
+            }}
           />
         ) : (
           // 첫 로딩 중엔 LV.1 외계인 대신 자리만 잡아둠 (아기→성장 깜빡임 방지)
