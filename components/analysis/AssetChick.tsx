@@ -4,22 +4,22 @@ import { useEffect, useMemo, useState } from "react";
 import { buildChickLines, type ChickLine, type ChickTx, type Mood } from "@/components/analysis/chickLines";
 
 /**
- * 우리의 외계인 👽 — 영웅 5명 키우기
+ * 우리의 외계인 👽 — 영웅 6명 키우기
  *
- * - 목표 자산(5억)을 50단계로 나눠 레벨 1~50 (1레벨 = 1,000만원)
- * - 10레벨마다 새 영웅이 착륙: 1번 LV.1~10 · 2번 LV.11~20 · 3번 LV.21~30 · 4번 LV.31~40 · 5번 LV.41~50
- * - 레벨마다 모습이 한 단계씩 바뀜 (외계인마을 폴더 lv1~lv20 이미지)
- * - 이미지: public/aliens/lvNN_{mood}.webp   (NN = 01, 02 … 20)
+ * - 목표 자산(5억)을 60단계로 나눠 레벨 1~60 (1레벨 ≈ 833만원)
+ * - 10레벨마다 새 영웅이 착륙: 기사 → 팔라딘 → 검사 → 법사 → 궁수 → 힐러
+ * - 각 영웅의 1~2단계는 공통 모습(아기 외계인), 3~10단계는 직업별 모습
+ * - 이미지: public/aliens/
+ *     공통   common_lv01_{mood}.webp, common_lv02_{mood}.webp
+ *     직업별 {key}_lvNN_{mood}.webp  (key: knight·paladin·sword·mage·archer·healer, NN = 03~10)
  *   mood: happy 웃음 · surprised 놀람 · neutral 무표정 · sad 울음 · angry 화남
- * - LV.21 이후는 아직 디자인 미정 → 🛸 + "???"로 표시
- *   새 이미지를 넣으면 READY_LEVEL 숫자와 LEVEL_NAMES 이름만 늘려주면 됨
+ *   빠진 단계 이미지는 MISSING에 적어두면 바로 아래 단계 이미지로 대신 보여줌
  * - 배경: public/aliens/bg_village.jpg (외계인 마을)
  */
 
 const GOAL = 500_000_000; // 목표 5억
-const MAX_LEVEL = 50;
-const STEP = GOAL / MAX_LEVEL; // 레벨당 1,000만원
-const READY_LEVEL = 20; // 이미지가 준비된 마지막 레벨
+const MAX_LEVEL = 60;
+const STEP = GOAL / MAX_LEVEL; // 레벨당 약 833만원
 
 type Props = {
   totalAssets: number;
@@ -28,56 +28,75 @@ type Props = {
   monthStartDay: number;
 };
 
-/* ───────── 레벨별 이름 (실제 이미지 외형 기준) ───────── */
-const LEVEL_NAMES: Record<number, string> = {
-  // 1번 영웅 — 탐험가 → 기사
-  1: "아기 외계인", // 맨몸 + 작은 가방
-  2: "꼬마 탐험가", // 새싹 배지 가방 + 두루마리
-  3: "스카프 탐험가", // 파란 스카프 + 벨트
-  4: "망토 탐험가", // 짧은 망토 + 새싹
-  5: "별배지 정찰병", // 별 배지 + 나침반
-  6: "깃발 정찰대장", // 등에 깃발
-  7: "견습 기사", // 금빛 더듬이 캡 + 갑옷 부츠
-  8: "왕관 기사", // 보석 왕관 + 갑옷 망토
-  9: "푸른별 기사", // 파란 보주 더듬이
-  10: "은하 수호기사", // 작은 날개 + 크리스털 장식
-  // 2번 영웅 — 책벌레 → 대마법사
-  11: "꼬마 책벌레", // 작은 책 + 스카프
-  12: "견습 학자", // 책 + 두루마리 + 짧은 망토
-  13: "견습 마법사", // 마법사 모자 등장
-  14: "초급 마법사", // 장식 달린 모자
-  15: "별빛 마법사", // 별 무늬 모자·로브
-  16: "보주 마법사", // 모자 벗고 파란 보주 더듬이
-  17: "왕관 마법사", // 보석 왕관 + 마법 카드
-  18: "성운 마법사", // 보석 모자 + 크리스털 장식
-  19: "대마법사", // 별 보석 모자 + 보주 지팡이
-  20: "은하 대마법사", // 화려한 왕관 모자 + 지팡이
-};
-
-/* ───────── 영웅 5명 ───────── */
+/* ───────── 영웅 6명 ───────── */
 type Hero = {
   no: number;
   from: number;
   to: number;
-  cls: string; // 계열 이름 (미정이면 "???")
+  key: string; // 이미지 파일 이름 앞부분
+  cls: string; // 직업 이름
+  names: string[]; // 3~10단계 이름 (실제 이미지 외형 기준)
   tint: string; // 배경 위에 살짝 얹는 색
   glow: string; // 캐릭터 뒤 오라 색
   accent: string; // 빛 입자·텔레포트 빔 색
-  particles: [string, string]; // [초반, 후반(6레벨차~)] 이모지 또는 "dot"
+  particles: [string, string]; // [초반, 후반(6단계~)] 이모지 또는 "dot"
 };
 
+// 모든 영웅 공통 1~2단계
+const COMMON_NAMES = ["아기 외계인", "꼬마 외계인"];
+
 const HEROES: Hero[] = [
-  { no: 1, from: 1, to: 10, cls: "기사", tint: "linear-gradient(180deg,#F1FFE4 0%,#EAF2FF 100%)", glow: "rgba(170,230,120,0.55)", accent: "rgba(110,170,255,0.8)", particles: ["dot", "⭐"] },
-  { no: 2, from: 11, to: 20, cls: "마법사", tint: "linear-gradient(180deg,#EFEAFF 0%,#E6F0FF 100%)", glow: "rgba(160,140,255,0.6)", accent: "rgba(140,120,255,0.8)", particles: ["✨", "🌟"] },
-  { no: 3, from: 21, to: 30, cls: "???", tint: "linear-gradient(180deg,#F3FFF6 0%,#EAF6FF 100%)", glow: "rgba(140,220,200,0.55)", accent: "rgba(110,210,190,0.8)", particles: ["dot", "✨"] },
-  { no: 4, from: 31, to: 40, cls: "???", tint: "linear-gradient(180deg,#FFF6EA 0%,#FFEDE6 100%)", glow: "rgba(255,190,120,0.6)", accent: "rgba(255,170,100,0.8)", particles: ["dot", "✨"] },
-  { no: 5, from: 41, to: 50, cls: "???", tint: "linear-gradient(180deg,#FFFBEA 0%,#EDE6FF 100%)", glow: "rgba(255,220,120,0.7)", accent: "rgba(255,210,100,0.85)", particles: ["⭐", "💎"] },
+  {
+    no: 1, from: 1, to: 10, key: "knight", cls: "기사",
+    names: ["스카프 수습생", "망토 수습생", "별배지 정찰병", "깃발 정찰대장", "견습 기사", "왕관 기사", "푸른별 기사", "은하 수호기사"],
+    tint: "linear-gradient(180deg,#F1FFE4 0%,#EAF2FF 100%)", glow: "rgba(170,230,120,0.55)", accent: "rgba(110,170,255,0.8)", particles: ["dot", "⭐"],
+  },
+  {
+    no: 2, from: 11, to: 20, key: "paladin", cls: "팔라딘",
+    names: ["나무방패 수련생", "별방패 수련생", "금빛 방패병", "문장 방패병", "견습 팔라딘", "날개방패 팔라딘", "보석관 팔라딘", "성광 팔라딘"],
+    tint: "linear-gradient(180deg,#FFF9E8 0%,#EEF3FF 100%)", glow: "rgba(255,215,120,0.6)", accent: "rgba(255,200,90,0.8)", particles: ["dot", "✨"],
+  },
+  {
+    no: 3, from: 21, to: 30, key: "sword", cls: "검사",
+    names: ["목검 수련생", "철검 수련생", "견습 검사", "망토 검사", "푸른칼 검사", "숙련 검사", "수정검 검사", "성검 마스터"],
+    tint: "linear-gradient(180deg,#EEF4FF 0%,#F4F1FF 100%)", glow: "rgba(130,180,255,0.6)", accent: "rgba(120,170,255,0.8)", particles: ["dot", "⚔️"],
+  },
+  {
+    no: 4, from: 31, to: 40, key: "mage", cls: "법사",
+    names: ["후드 견습생", "견습 마법사", "초급 마법사", "별빛 마법사", "왕관 마법사", "성운 마법사", "대마법사", "은하 대마법사"],
+    tint: "linear-gradient(180deg,#EFEAFF 0%,#E6F0FF 100%)", glow: "rgba(160,140,255,0.6)", accent: "rgba(140,120,255,0.8)", particles: ["✨", "🌟"],
+  },
+  {
+    no: 5, from: 41, to: 50, key: "archer", cls: "궁수",
+    names: ["꼬마 궁수", "새싹 궁수", "숲지기 궁수", "망토 궁수", "바람 궁수", "잎새 명궁", "깃털 명궁", "은하 명궁"],
+    tint: "linear-gradient(180deg,#EFFFF0 0%,#E9F6FF 100%)", glow: "rgba(140,220,150,0.6)", accent: "rgba(110,200,140,0.8)", particles: ["🍃", "✨"],
+  },
+  {
+    no: 6, from: 51, to: 60, key: "healer", cls: "힐러",
+    names: [], // 이미지 다시 작업 중 → 들어오면 3~10단계 이름 채우기
+    tint: "linear-gradient(180deg,#FFFCEF 0%,#EEF2FF 100%)", glow: "rgba(255,230,150,0.7)", accent: "rgba(255,215,120,0.85)", particles: ["✨", "💖"],
+  },
 ];
 
+// 아직 이미지가 없는 단계 → 바로 아래 단계 이미지로 대신 표시
+const MISSING: Record<string, number[]> = { sword: [8] };
+// 3~10단계 이미지가 아직 없는 영웅 → 🛸 + "???"로 표시
+const NOT_READY = ["healer"];
+
 const heroOf = (level: number) => HEROES.find((h) => level >= h.from && level <= h.to) || HEROES[0];
-const nameOf = (level: number) => LEVEL_NAMES[level] ?? "???";
-const alienSrc = (level: number, mood: Mood) =>
-  level <= READY_LEVEL ? `/aliens/lv${String(level).padStart(2, "0")}_${mood}.webp` : null;
+const stepOf = (level: number) => level - heroOf(level).from + 1; // 영웅 안에서 1~10단계
+const nameOf = (level: number) => {
+  const step = stepOf(level);
+  return step <= 2 ? COMMON_NAMES[step - 1] : heroOf(level).names[step - 3] ?? "???";
+};
+const alienSrc = (level: number, mood: Mood): string | null => {
+  const hero = heroOf(level);
+  let step = stepOf(level);
+  if (step <= 2) return `/aliens/common_lv0${step}_${mood}.webp`;
+  if (NOT_READY.includes(hero.key)) return null;
+  while (step > 3 && MISSING[hero.key]?.includes(step)) step--;
+  return `/aliens/${hero.key}_lv${String(step).padStart(2, "0")}_${mood}.webp`;
+};
 
 // "꼬마 탐험가" → "꼬마 탐험가로" (받침 없거나 ㄹ이면 '로')
 const withRo = (word: string) => {
@@ -107,7 +126,7 @@ function pickLine(lines: ChickLine[], exclude: number | null) {
   return { idx, textIdx };
 }
 
-/* ───────── 영웅 슬롯 (아래 5칸) ───────── */
+/* ───────── 영웅 슬롯 (아래 6칸) ───────── */
 function HeroSlot({ hero, level }: { hero: Hero; level: number }) {
   const done = level > hero.to;
   const current = level >= hero.from && level <= hero.to;
@@ -153,7 +172,7 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
   const levelProgress = level >= MAX_LEVEL ? 1 : (safeAssets - levelBase) / STEP;
   const nextAmount = level * STEP;
   const hero = heroOf(level);
-  const step = level - hero.from + 1; // 이 영웅 안에서 몇 번째 단계인지 (1~10)
+  const step = stepOf(level); // 이 영웅 안에서 몇 번째 단계인지 (1~10)
   const levelName = nameOf(level);
 
   // 연출: 영웅 안에서 단계가 오를수록 화려해짐
@@ -195,10 +214,10 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
 
   // 다음 단계 안내
   const nextInfo = (() => {
-    if (level >= MAX_LEVEL) return "영웅 5명 수련 완료!";
+    if (level >= MAX_LEVEL) return "영웅 6명 수련 완료!";
     const next = level + 1;
-    if (next > hero.to) return `LV.${next}에서 ${hero.no + 1}번째 영웅 착륙`;
-    if (LEVEL_NAMES[next]) return `LV.${next}에서 ${withRo(LEVEL_NAMES[next])} 진화`;
+    if (next > hero.to) return `LV.${next}에서 ${HEROES[hero.no]?.cls ?? "새 영웅"} 착륙`;
+    if (nameOf(next) !== "???") return `LV.${next}에서 ${withRo(nameOf(next))} 진화`;
     return `LV.${next} 모습은 준비 중`;
   })();
 
@@ -375,7 +394,7 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
             fontWeight: 900,
           }}
         >
-          {hero.no}번째 영웅
+          {hero.no}번째 영웅 · {hero.cls}
         </div>
       </div>
 
@@ -460,11 +479,11 @@ export default function AssetChick({ totalAssets, transactions, budgets, monthSt
         </div>
         <div style={{ marginTop: 5, display: "flex", justifyContent: "space-between", fontSize: 10, color: "#B0A8C8" }}>
           <span>{nextInfo}</span>
-          <span>목표 5억 · 1레벨 1,000만원</span>
+          <span>목표 5억 · 1레벨 약 833만원</span>
         </div>
       </div>
 
-      {/* 영웅 5명 */}
+      {/* 영웅 6명 */}
       <div style={{ marginTop: 14, padding: "10px 6px 8px", borderRadius: 16, background: "#FAF8FF", display: "flex", gap: 4 }}>
         {HEROES.map((h) => (
           <HeroSlot key={h.no} hero={h} level={level} />

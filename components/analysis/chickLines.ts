@@ -374,8 +374,8 @@ export function buildChickLines(params: {
       "더듬이가 근질근질해… 곧 진화할 것 같아!",
     ]);
   }
-  const heroNo = Math.ceil(level / 10); // 1~5번째 영웅
-  const isNewHero = level > 1 && level % 10 === 1; // LV.11, 21, 31, 41
+  const heroNo = Math.ceil(level / 10); // 1~6번째 영웅
+  const isNewHero = level > 1 && level % 10 === 1; // LV.11, 21, 31, 41, 51
   if (level > 1 && levelProgress < 0.08 && !isNewHero) {
     say("status", "happy", [`LV.${level} 달성! 새 장비 어때?`, "레벨업했어! 우리 정말 잘하고 있어."]);
     say("status", "surprised", ["어? 나 모습이 바뀌었어?!", `우와, 벌써 LV.${level}?! 믿기지 않아!`]);
@@ -388,14 +388,18 @@ export function buildChickLines(params: {
     say("status", "happy", ["이번 영웅 수련이 거의 끝났어! 마무리하자.", "곧 다음 영웅이 착륙할 거야. 두근두근!"]);
   }
   if (level >= maxLevel) {
-    say("status", "happy", ["목표 달성! 영웅 다섯 모두 완성이야!", "5억 달성! 지구인 둘 덕분이야. 고마워!"]);
+    say("status", "happy", ["목표 달성! 영웅 여섯 모두 완성이야!", "5억 달성! 지구인 둘 덕분이야. 고마워!"]);
   }
-  // 영웅 계열별 잡담 (1번 기사 · 2번 마법사)
-  if (heroNo === 1) {
-    say("idle", "neutral", ["기사가 되려면 저축 수련부터 해야 해!", "지갑을 지키는 것도 기사의 임무야."]);
-  } else if (heroNo === 2) {
-    say("idle", "neutral", ["마법 주문! 지출아 줄어라, 얍!", "통장이 불어나는 마법을 공부 중이야."]);
-  }
+  // 영웅 직업별 잡담 (기사 → 팔라딘 → 검사 → 법사 → 궁수 → 힐러)
+  const classLines: Record<number, string[]> = {
+    1: ["기사가 되려면 저축 수련부터 해야 해!", "지갑을 지키는 것도 기사의 임무야."],
+    2: ["이 방패로 충동구매를 막아줄게!", "팔라딘의 맹세: 예산은 꼭 지킨다!"],
+    3: ["불필요한 지출은 내 검으로 싹둑!", "검술도 저축도 매일 조금씩이 비결이야."],
+    4: ["마법 주문! 지출아 줄어라, 얍!", "통장이 불어나는 마법을 공부 중이야."],
+    5: ["목표 금액에 정조준! 한 발씩 가자.", "멀리 보는 궁수처럼 길게 모으자!"],
+    6: ["지친 통장도 내가 회복시켜 줄게!", "힐링 주문: 오늘은 무지출로 쉬어가자."],
+  };
+  if (classLines[heroNo]) say("idle", "neutral", classLines[heroNo]);
   // 최근 두 달 평균 순저축으로 다음 레벨 예상
   const net = (r: { start: Date; end: Date }) => sum(r.start, r.end, isIncome) - sum(r.start, r.end, isExpense);
   const avgNet = (net(prev) + net(prev2)) / 2;

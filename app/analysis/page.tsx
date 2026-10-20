@@ -831,7 +831,7 @@ const getPercent = (owner: string) => {
       <section style={cardStyle}>
         <div style={spendingHeaderStyle}>
           <strong style={{ fontSize: 14 }}>우리의 외계인 👽</strong>
-          <span style={smallSubTextStyle}>영웅 5명 · 50레벨</span>
+          <span style={smallSubTextStyle}>영웅 6명 · 60레벨</span>
         </div>
         {dataReady ? (
           <AssetChick
